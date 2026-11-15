@@ -1,110 +1,87 @@
-// Every number and every line of text lives here. Change values to rebalance;
-// re-run `node tests/run-tests.js` afterwards to see how the test cases move.
-// All values are FICTIONAL game-balance numbers unless marked REAL.
+// v2 settings. REAL = measured or physical constant; everything else is a game value.
+// Re-run `node tests/run-tests.js` after changing numbers.
 
 const CONFIG = {
   roverName: "LUMI",
-  missionName: "Shackleton Shadow Survey",
 
-  massLimit: 35,            // kg of payload the rover can carry
-  mainBattery: 1000,        // Wh
-  backupBattery: 600,       // Wh added by the backup battery item
-  failure: {
-    shifts: [2, 4],         // failure hits at the START of one of these, 50/50
-    newMainCapacity: 400,   // Wh after the cell short
-  },
-  repairMainCapacity: 800,  // Wh after using the repair kit (costs that shift)
-  heatersOffSaving: 100,    // Wh saved in the crater by switching heaters off
-  commsBlackout: true,      // crater commands must be uploaded before going in
-  revealCraterNeedsAtLoadout: false, // false = hidden numbers, only a hint
+  // Physics
+  gMoon: 1.62,                 // m/s², REAL lunar surface gravity
+  sunElevationDeg: 1.5,        // REAL: the Sun never rises more than ~1.5° above the horizon at the lunar poles
+  earthElevationDeg: 4,        // Earth sits near the horizon from the south pole (game value within the real ±~7° libration)
+  roverBaseMassKg: 250,        // rover without payload
+  rollingResistance: 0.08,     // fraction of weight needed to keep rolling on regolith
+  drivetrainEfficiency: 0.5,   // wheel energy / battery energy
+  maxSlopeDeg: 15,             // steepest slope the rover can safely drive (editable on the crater screen)
+  speedKmh: 4,                 // rover cruising speed (mission time)
+  timeScale: 360,              // 1 real second = 6 mission minutes
 
-  // REAL: there is no direct sunlight on a permanently shadowed crater floor,
-  // so solar input there is zero. The other numbers are fictional.
-  shifts: [
-    { n: 1, place: "rim",    title: "Crater rim",        solar: 600, housekeeping: 100, sun: 0.55 },
-    { n: 2, place: "rim",    title: "Crater rim, edge",  solar: 600, housekeeping: 100, sun: 0.30 },
-    { n: 3, place: "crater", title: "Crater floor",      solar: 0,   housekeeping: 200, sun: 0 },
-    { n: 4, place: "rim",    title: "Climb back to rim", solar: 600, housekeeping: 100, sun: 0.15 },
-  ],
+  // Power
+  mainBatteryWh: 4000,
+  backupBatteryWh: 2000,
+  solarPanelW: 300,            // in full sunlight
+  systemsW: 25,                // computers, radio
+  headlightsW: 40,
+  heaterW: (floorTempK) => Math.round(10 + 0.25 * (273 - floorTempK)), // heaters work harder the colder it is
+  failure: { mainFraction: 0.4 },          // main pack drops to 40 %
+  repair: { mainFraction: 0.8, hours: 3 },  // repair kit: 3 mission hours, pack back to 80 %
+  blindSpeedFactor: 0.3,       // driving in the dark without headlights
+
+  // Science
+  scienceNeedsUplink: true,    // data only counts once it reaches Earth (needs line of sight)
+  siteRadiusM: 600,
 
   items: [
-    {
-      id: "neutron", kind: "instrument", name: "Neutron Spectrometer", short: "Neutron",
-      mass: 8, energy: 200, points: { rim: 10, crater: 10 }, helps: ["R1"],
-      what: "Counts neutrons leaking up from the ground. Fewer fast neutrons means more hydrogen nearby, a hint of water.",
-      why: "Light, cheap to run, works anywhere. It finds where to look, not what is there.",
-    },
-    {
-      id: "ir", kind: "instrument", name: "IR Spectrometer", short: "IR",
-      mass: 10, energy: 300, points: { rim: 15, crater: 30 }, helps: ["R2"],
-      what: "Reads which colors of infrared light the surface absorbs. Water ice has its own fingerprint.",
-      why: "Can detect ice at the surface. Worth twice as much on the crater floor.",
-    },
-    {
-      id: "drill", kind: "instrument", name: "Drill + Sample Analyzer", short: "Drill",
-      mass: 15, energy: 500, points: { rim: 10, crater: 60 }, helps: ["R2", "R3"],
-      what: "Drills about a meter down and heats the cuttings to see what gases come off.",
-      why: "The only way to confirm ice below the surface. Heavy and power-hungry.",
-    },
-    {
-      id: "camera", kind: "instrument", name: "Science Camera", short: "Camera",
-      mass: 4, energy: 100, points: { rim: 5, crater: 5 }, helps: [],
-      what: "High-resolution images for context and for the public.",
-      why: "Cheap points, but it answers no requirement on its own.",
-    },
-    {
-      id: "backup", kind: "support", name: "Backup Battery", short: "Backup",
-      mass: 10, helps: [],
-      what: "A second battery pack, wired separately from the main one. Adds 600 Wh of storage.",
-      why: "Redundancy: if the main pack fails, this one keeps going. Costs the mass of an instrument.",
-    },
-    {
-      id: "kit", kind: "support", name: "Repair Kit", short: "Repair kit",
-      mass: 3, helps: [],
-      what: "Spare cells and tools. If the main battery fails, LUMI can spend a shift swapping cells.",
-      why: "Light, but fixing things takes time. Restores the main pack to 800 Wh.",
-    },
+    { id: "neutron", kind: "instrument", name: "Neutron Spectrometer", short: "Neutron", mass: 8, energy: 200, points: { rim: 10, wall: 10, floor: 10 },
+      what: "Counts neutrons leaking up from the ground. Fewer fast neutrons means more hydrogen, a hint of water.", why: "Light and cheap. Finds where to look." },
+    { id: "ir", kind: "instrument", name: "IR Spectrometer", short: "IR", mass: 10, energy: 300, points: { rim: 15, wall: 15, floor: 30 },
+      what: "Reads which colors of infrared light the ground absorbs. Water ice has its own fingerprint.", why: "Detects surface ice. Worth double in the cold trap." },
+    { id: "drill", kind: "instrument", name: "Drill + Sample Analyzer", short: "Drill", mass: 15, energy: 500, points: { rim: 10, wall: 10, floor: 60 },
+      what: "Drills about a meter down and heats the cuttings to see what gases come off.", why: "The only way to confirm buried ice. Heavy and hungry." },
+    { id: "camera", kind: "instrument", name: "Science Camera", short: "Camera", mass: 4, energy: 100, points: { rim: 5, wall: 5, floor: 5 },
+      what: "High-resolution images for context.", why: "Cheap points; answers no requirement." },
+    { id: "backup", kind: "support", name: "Backup Battery", short: "Backup", mass: 10,
+      what: "A separate 2,000 Wh pack.", why: "Redundancy, and a reserve for the climb out. Costs an instrument's mass." },
+    { id: "kit", kind: "support", name: "Repair Kit", short: "Repair kit", mass: 3,
+      what: "Spare cells and tools.", why: "If the main pack fails, spend 3 hours swapping cells to restore it to 80 %." },
   ],
+  massLimit: 35,
 
   requirements: [
-    { id: "R1", title: "Hydrogen survey",       text: "Run the Neutron Spectrometer on at least 2 shifts." },
-    { id: "R2", title: "Ice detected",          text: "Run the IR Spectrometer or the Drill on the crater floor." },
-    { id: "R3", title: "Ice confirmed at depth", text: "Run the Drill on the crater floor." },
+    { id: "R1", title: "Hydrogen survey", text: "Run the Neutron Spectrometer at 2 different sites." },
+    { id: "R2", title: "Ice detected", text: "Run the IR Spectrometer or Drill at the cold trap." },
+    { id: "R3", title: "Ice confirmed at depth", text: "Run the Drill at the cold trap." },
+    { id: "R4", title: "Data returned", text: "Get the cold-trap data back to Earth (climb until you have signal)." },
   ],
 
   tiers: {
-    full:    { label: "FULL SUCCESS",    line: "Ice confirmed at depth. The next team that comes here will know exactly where to dig." },
-    partial: { label: "PARTIAL SUCCESS", line: "We saw ice, but we couldn't prove how deep it goes. That's still a first." },
-    minimum: { label: "MINIMUM SUCCESS", line: "We mapped the hydrogen. The answer is down there; we just couldn't reach it this time." },
-    failure: { label: "MISSION FAILURE", line: "We didn't meet a single requirement. Let's figure out why and go again." },
+    full: { label: "FULL SUCCESS", line: "Ice confirmed and the data is home. The next mission will know exactly where to dig." },
+    partial: { label: "PARTIAL SUCCESS", line: "We found signs of ice, but not everything we wanted made it home." },
+    minimum: { label: "MINIMUM SUCCESS", line: "We mapped the hydrogen. The answer is down there; we just couldn't bring it back." },
+    failure: { label: "MISSION FAILURE", line: "No requirement met. Let's find out why and try again." },
   },
 
-  // Rover lines. LUMI is a partner, not a system log. Rewrite these in your own voice.
   say: {
-    title:        "Systems online. I'm LUMI. I'll be your eyes at the lunar south pole.",
-    briefing:     "Mission control picked a crater that hasn't seen sunlight in a very long time. If there's ice anywhere on the Moon, it's in places like this.",
-    loadout:      "Pack me carefully. I can carry 35 kilograms, and I'm the one who'll be out in the cold.",
-    overMass:     "That's more than I can carry. Something has to stay home.",
-    noBackup:     "No backup battery? Bold. I just hope you like rationing.",
-    withBackup:   "A spare battery. Less science, more sleep at night. I approve.",
-    launch:       "Touchdown confirmed. Opening my eyes.",
-    shift1:       "The sun barely clears the horizon here, so my panels catch what they can. Shadows are kilometers long.",
-    shift2:       "Shadows are getting longer. The crater is right below us.",
-    uplink:       "Once I drop below the rim, Earth goes behind the crater wall and I lose you. Give me my crater orders now. I'll follow them exactly.",
-    crater:       "It's dark. Properly dark. Headlights on.",
-    craterNoComms:"(No signal from Earth. Running the uploaded plan.)",
-    iceIR:        "The IR spectrum has a dip right where water ice absorbs. I think we're looking at frost.",
-    iceDrill:     "There's frost on the drill bit. That's ice. That's actually ice!",
-    shift4:       "Climbing out. Earth is back over the rim. Sending you everything.",
-    lostShift:    "Still thawing out. My electronics got cold-soaked down there. I'm sitting this one out.",
-    repairing:    "Swapping cells. Don't watch, it's a little embarrassing.",
-    failure:      "Cell short in my main battery! It can only hold 400 Wh now, and whatever was stored above that is gone.",
-    failBackup:   "Good thing you packed my backup. I'm routing power through it.",
-    failKit:      "I've got the repair kit. Give me this shift and I'll get the main pack back to 800 Wh.",
-    failNone:     "No backup, no repair kit. We make every watt-hour count from here.",
-    lowPower:     "Running low. I'm dimming everything I can.",
-    heatersOff:   "Heaters off? I'll do it. But I'll be frozen stiff afterwards. I won't be able to work next shift.",
-    debrief:      "Mission complete. Pointing my camera home.",
+    pick: "Where are we going? Every one of these craters is real. The terrain comes from NASA's laser altimeter.",
+    loadout: "Pack me carefully. 35 kilograms, and remember: what goes down has to climb back up.",
+    overMass: "That's more than I can carry.",
+    start: "Wheels down on the rim. The Sun is a sliver on the horizon. It never gets higher than about a degree and a half here.",
+    edge: "Crater edge ahead. Slope here is {slope}°. I can handle {max}°. The beacons mark the gentlest way down.",
+    tooSteepUp: "Too steep to climb: {slope}°. Find a gentler line.",
+    tooSteepDown: "I'm not going down {slope}°. I'd tumble. Try along the beacons.",
+    shadow: "We just crossed into permanent shadow. No sunlight has touched this ground in a very long time.",
+    signalLost: "Earth just dropped behind the crater wall. I'm on my own until we climb back up.",
+    signalBack: "Earth is back in view. Uploading everything we've got.",
+    noLights: "Driving blind. I'll go slowly.",
+    site: "Science site in range. Press E to set up.",
+    ice: "Frost on the drill bit. That's ice. That's actually ice!",
+    iceIR: "The IR spectrum dips right where water ice absorbs. I think we're looking at frost.",
+    lowPower: "Battery under 20 %. Think about the climb back.",
+    failure: "Cell short in my main pack! It only holds {cap} Wh now.",
+    failBackup: "My backup pack is fine. Rerouting power.",
+    failKit: "I can swap cells with the repair kit. It'll cost us three hours.",
+    failNone: "No backup, no repair kit. Every watt-hour counts now.",
+    stuck: "That's it. I'm out of power. I'll sleep here and dream about sunlight.",
+    home: "Data's home. That's a mission.",
   },
 };
 

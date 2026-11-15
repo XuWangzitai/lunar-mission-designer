@@ -1,68 +1,47 @@
-// Replays the design playthroughs (OUTLINE.md section 6) against the real rules.
+// v2 checks: real crater data loads, physics behaves, and each crater's forecast is sane.
 // Run: node tests/run-tests.js
 
-const Game = require("../game.js");
+global.CONFIG = require("../config.js");
+global.Terrain = require("../terrain.js");
+const Sim = require("../sim.js");
+const CRATERS = require("../data/craters.js");
 
-const A = ["neutron", "ir", "drill"];
-const B = ["neutron", "drill", "backup"];
+let fails = 0;
+const check = (label, cond, detail = "") => { if (!cond) fails++; console.log(`${cond ? "PASS" : "FAIL"}  ${label} ${detail}`); };
 
-// plan[i] = { run: [...ids], heatersOff, response } for shift i+1
-const cases = [
-  { name: "A, early failure, heaters on", loadout: A, failureShift: 2,
-    plan: [{ run: ["neutron", "ir"] }, { run: ["neutron", "ir"], response: "ration" }, { run: ["neutron"] }, { run: ["neutron", "ir"] }],
-    score: 85, tier: "minimum" },
-  { name: "A, early failure, heaters off", loadout: A, failureShift: 2,
-    plan: [{ run: ["neutron", "ir"] }, { run: ["neutron", "ir"], response: "ration" }, { run: ["ir"], heatersOff: true }, { run: [] }],
-    score: 80, tier: "partial" },
-  { name: "A, late failure", loadout: A, failureShift: 4,
-    plan: [{ run: ["neutron", "ir"] }, { run: ["neutron", "ir"] }, { run: ["ir", "drill"] }, { run: ["neutron", "ir"], response: "ration" }],
-    score: 165, tier: "full" },
-  { name: "B, early failure", loadout: B, failureShift: 2,
-    plan: [{ run: ["neutron", "drill"] }, { run: ["neutron"], response: "ration" }, { run: ["drill", "neutron"] }, { run: ["neutron"] }],
-    score: 110, tier: "full" },
-  { name: "B, late failure", loadout: B, failureShift: 4,
-    plan: [{ run: ["neutron", "drill"] }, { run: ["neutron", "drill"] }, { run: ["drill", "neutron"] }, { run: ["neutron", "drill"], response: "ration" }],
-    score: 130, tier: "full" },
-];
+const sh = CRATERS.find((c) => c.id === "shackleton");
+check("Shackleton depth matches NASA (4.1 ± 0.2 km)", Math.abs(sh.depthKm - 4.1) < 0.2, `got ${sh.depthKm}`);
+check("Shackleton walls ~30° (Zuber 2012: 30.5°)", Math.abs(sh.wallSlopeMeanDeg - 30.5) < 3, `got ${sh.wallSlopeMeanDeg}`);
 
-let failures = 0;
-function check(label, cond, detail = "") {
-  if (!cond) { failures++; console.log(`  FAIL ${label} ${detail}`); }
+const FULL = ["neutron", "ir", "drill"];
+const SAFE = ["neutron", "drill", "backup"];
+console.log("\nForecasts (energy to visit all 3 sites and return to the start):");
+for (const c of CRATERS) {
+  const T = Terrain.fromCrater(c);
+  const floorLit = Terrain.litAt(T, T.sites[2].x, T.sites[2].y);
+  const fmt = (p) => `${p.needed}/${p.capacity}Wh→${p.stuck ? "STUCK" : p.tier}`;
+  const a = Sim.predict(T, FULL), af = Sim.predict(T, FULL, { failure: "shadow" });
+  const b = Sim.predict(T, SAFE), bf = Sim.predict(T, SAFE, { failure: "shadow" });
+  const trapKm = (Math.hypot(T.sites[2].x - T.start.x, T.sites[2].y - T.start.y) / 1000).toFixed(1);
+  console.log(`  ${c.name.padEnd(11)} route ${String(c.gentlestRoute.maxSlopeDeg).padStart(4)}° trap ${trapKm} km, ${(-T.sites[2].z).toFixed(0)} m down, shadow ${a.shadowH.toFixed(1)} h | MAX ${fmt(a)} fail:${fmt(af)} | SAFE ${fmt(b)} fail:${fmt(bf)}`);
+  check(`${c.name}: cold trap is in permanent shadow`, floorLit === 0);
 }
 
-for (const c of cases) {
-  const s = Game.create(c.loadout, { failureShift: c.failureShift });
-  c.plan.forEach((p) => {
-    if (Game.startShift(s)) Game.respond(s, p.response || "ration");
-    Game.endShift(s, p.run, !!p.heatersOff);
-  });
-  const r = Game.evaluate(s);
-  const ok = r.score === c.score && r.tier === c.tier;
-  console.log(`${ok ? "PASS" : "FAIL"}  ${c.name}: ${r.score} pts, ${r.tier} (expected ${c.score}, ${c.tier})`);
-  if (!ok) failures++;
-  if (!r.met.R3) console.log(`        R3: ${r.why.R3}`);
-}
+// Physics sanity: climbing 1 km costs m·g·h/η.
+const T = Terrain.fromCrater(CRATERS[3]);
+const s = Sim.create(T, ["neutron"]);
+const before = s.stored;
+Sim.tick(s, 0, 0, 1000, { lit: 0, shadow: false, signal: true, lights: false });
+const expected = (258 * 1.62 * 1000) / 0.5 / 3600;
+check("climb energy = m·g·h/η", Math.abs(before - s.stored - expected) < 0.5, `${(before - s.stored).toFixed(1)} vs ${expected.toFixed(1)} Wh`);
 
-// Edge checks
-check("mass limit blocks 36 kg", Game.loadoutMass(["neutron", "ir", "drill", "kit"]) > 35);
-{
-  const s = Game.create(A, { failureShift: 2 });
-  Game.startShift(s); Game.endShift(s, ["neutron", "ir"]);
-  Game.startShift(s); Game.respond(s, "ration"); Game.endShift(s, ["neutron", "ir"]);
-  Game.startShift(s);
-  let threw = false;
-  try { Game.endShift(s, ["drill"]); } catch { threw = true; }
-  check("overspending is rejected", threw);
-  check("stored never negative", s.stored >= 0);
-}
-{
-  const s = Game.create(["neutron", "drill", "kit"], { failureShift: 2 });
-  Game.startShift(s); Game.endShift(s, ["neutron"]);
-  Game.startShift(s); Game.respond(s, "repair");
-  const log = Game.endShift(s, ["neutron"]);
-  check("repair shift runs no instruments", log.ran.length === 0);
-  check("repair restores 800 Wh", Game.capacity(s) === 800, `got ${Game.capacity(s)}`);
-}
+// Data taken out of signal only counts once uplinked.
+const s2 = Sim.create(T, ["neutron", "drill"], { failureTrigger: "none" });
+Sim.tick(s2, 0.1, 0, 0, { lit: 0, shadow: true, signal: false, lights: true });
+Sim.runScience(s2, T.sites[2], ["drill"]);
+check("cold-trap data waits for signal", Sim.evaluate(s2).met.R4 === false && s2.pending.length === 1);
+Sim.tick(s2, 0.1, 0, 0, { lit: 1, shadow: false, signal: true, lights: false });
+check("data uplinks when Earth is in view", Sim.evaluate(s2).met.R4 === true);
 
-console.log(failures ? `\n${failures} failure(s)` : "\nAll tests passed");
-process.exit(failures ? 1 : 0);
+console.log(fails ? `\n${fails} failure(s)` : "\nAll tests passed");
+process.exit(fails ? 1 : 0);
