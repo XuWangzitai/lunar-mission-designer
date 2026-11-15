@@ -289,8 +289,10 @@ function drive(dt) {
   }
 
   const dtH = (dt * C.timeScale) / 3600;
-  const events = Sim.tick(sim, dtH, moved, climb, { lit, shadow, signal, lights: state.lights && shadow, slopeDeg: slope });
+  const deep = TR.heightAt(T, state.x, state.y) < -200 * T.meta.depthKm; // more than 20 % of the way down
+  const events = Sim.tick(sim, dtH, moved, climb, { lit, shadow, deep, signal, lights: state.lights && shadow, slopeDeg: slope });
   events.forEach((ev) => emit(ev));
+  if (sim && sim.done) { emit("stuck"); return; } // battery ran out this frame: always tell the UI
 
   const near = T.sites.find((s) => Math.hypot(s.x - state.x, s.y - state.y) < C.siteRadiusM) || null;
   if ((near && near.id) !== (state.near && state.near.id)) { state.near = near; emit("near", near); }

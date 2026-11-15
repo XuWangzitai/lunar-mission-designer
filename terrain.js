@@ -137,7 +137,7 @@ const Terrain = (() => {
       for (const da of [0, 180, 30, 210, -30, 150, 60, 240, -60, 120, 90, 270]) {
         const a = along + da * deg, p = { x: start.x + Math.cos(a) * d, y: start.y + Math.sin(a) * d };
         if (Math.abs(p.x) > T.half * 0.95 || Math.abs(p.y) > T.half * 0.95) continue;
-        if (litAt(T, p.x, p.y) >= 0.5 && signalAt(T, p.x, p.y) && maxSlope(T, p.x, p.y) < 10 && findPath(T, start, p, C.maxSlopeDeg).reached) { rimSite = p; break; }
+        if (litAt(T, p.x, p.y) >= 0.5 && sunlitAround(T, p, C.siteRadiusM) && signalAt(T, p.x, p.y) && maxSlope(T, p.x, p.y) < 10 && findPath(T, start, p, C.maxSlopeDeg).reached) { rimSite = p; break; }
       }
       if (rimSite) break;
     }
@@ -190,6 +190,14 @@ const Terrain = (() => {
     for (let k = end; k !== -1; k = came[k]) path.push({ x: -T.half + (k % n) * T.cell, y: -T.half + Math.floor(k / n) * T.cell });
     path.reverse();
     return { path, reached: end === goal };
+  }
+
+  // No permanently shadowed ground anywhere within r meters (so a whole site ring is sunlit).
+  function sunlitAround(T, p, r) {
+    for (let a = 0; a < 8; a++) for (const f of [0.5, 1]) {
+      if (litAt(T, p.x + Math.cos((a * Math.PI) / 4) * r * f, p.y + Math.sin((a * Math.PI) / 4) * r * f) === 0) return false;
+    }
+    return true;
   }
 
   function mapAt(T, arr, x, y) {

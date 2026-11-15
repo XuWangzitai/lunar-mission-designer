@@ -15,5 +15,6 @@ Tool: **Claude (Anthropic), Claude Code desktop app**. All generated code is ack
 | 2026-11-14 | Generated v2 code: terrain.js (shadow, Earth line-of-sight, A* safe route), sim.js (energy physics), world3d.js (Three.js driving), ui.js, tests | Requested 3D, keyboard driving, edge warning, live HUD; chose character voice; play-tested |
 | 2026-11-14 | Added the full-screen map, live power-flow readout, mission briefing, next-step guide, requirement tags and "Why?" science explainers; tested with automated play-throughs | Reported that players get lost without guidance and that the battery looked stuck at the start; asked for these fixes |
 | 2026-11-14 | Built the rover-engineering panel (mass-coupled battery/solar limits, presets) and restyled the interface in a minimal aerospace look | Proposed custom rover values with realistic limits; asked for a non-generic, aerospace-style design |
+| 2026-11-14 | Renamed the rover to THOX; fixed the science panel overlap, added run results and R1 progress, blocked duplicate runs, fixed a freeze when the battery ran out; added a 3,060-mission combination test | Chose the name THOX; reported the overlap and the confusing science panel from a full-screen play-test; asked for wider testing |
 
 No AI-generated images, video, or audio are used. All visuals are drawn in code (SVG/CSS).

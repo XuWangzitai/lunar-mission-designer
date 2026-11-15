@@ -269,6 +269,8 @@ const UI = (() => {
     const T = terrain, [rim, wall, trap] = T.sites, has = (id) => loadout.includes(id);
     const ran = (id, site) => sim.runs.some((r) => r.id === id && r.site === site);
     const met = Sim.evaluate(sim).met, near = World.nearSite();
+    if (Sim.repairing(sim)) return `Repairing the main pack: <b>${Math.max(0, sim.repairUntilH - sim.timeH).toFixed(1)} h</b> left. ${C.roverName} can't drive or run instruments until it's done.`;
+    if (!loadout.some((id) => item(id).kind === "instrument")) return `No instruments on board, so no requirement can be met. Press <b>End mission</b> and change the payload.`;
     let target = null;
     if (has("neutron") && !met.R1 && !ran("neutron", "rim")) target = rim;
     else if (has("neutron") && !met.R1 && !ran("neutron", "wall")) target = wall;
@@ -323,18 +325,41 @@ const UI = (() => {
     $("#h-shadow").hidden = !h.shadow;
     $("#h-lights").textContent = h.lights ? "ON" : "OFF";
     $("#h-time").textContent = `${sim.timeH.toFixed(1)} h · ${sim.distanceKm.toFixed(1)} km`;
-    const ev = Sim.evaluate(sim);
-    $("#h-reqs").innerHTML = C.requirements.map((r) => `<li class="${ev.met[r.id] ? "ok" : ""}">${ev.met[r.id] ? "■" : "□"} ${r.id} ${r.title}</li>`).join("")
-      + (sim.pending.length ? `<li class="bad">${sim.pending.length} result(s) waiting for signal</li>` : "");
-    $("#h-score").textContent = ev.score;
+    refreshMission();
     drawRover(h);
   }
 
+  // Mission box, battery and score. Also called right after science runs, while the drive is paused.
+  function refreshMission() {
+    const cap = Sim.capacity(sim);
+    $("#h-batt").textContent = `${fmt(sim.stored)} / ${fmt(cap)} Wh`;
+    $("#h-batt-bar").style.width = `${(sim.stored / cap) * 100}%`;
+    const ev = Sim.evaluate(sim);
+    $("#h-reqs").innerHTML = C.requirements.map((r) => `<li class="${ev.met[r.id] ? "ok" : ""}">${ev.met[r.id] ? "■" : "□"} ${r.id} ${r.title}${!ev.met[r.id] && ev.progress[r.id] ? ` (${ev.progress[r.id]})` : ""}</li>`).join("")
+      + (sim.pending.length ? `<li class="bad">${sim.pending.length} result(s) waiting for signal</li>` : "");
+    $("#h-score").textContent = ev.score;
+  }
+
+  // Panels opened during the drive are modals above the HUD, so nothing overlaps them.
   function openSite(site) {
+    if (!sim || sim.done) return;
+    if (sim.failurePending) return openFailure();
     World.setPaused(true);
     siteOpen = site;
     const done = (id) => sim.runs.some((r) => r.id === id && r.site === site.id);
     const ids = loadout.filter((id) => item(id).kind === "instrument");
+    const left = ids.filter((id) => !done(id));
+    if (!ids.length || !left.length || Sim.repairing(sim)) {
+      const msg = Sim.repairing(sim) ? `${C.roverName} is still swapping battery cells. Instruments are offline until the repair is finished.`
+        : !ids.length ? "You didn't pack any instruments, so there is nothing to run. Change the payload and fly again."
+        : "Every instrument you packed has already run here. Each one counts once per site, so there is nothing more to gain. Check the Next line for where to go.";
+      return setPanel(`
+        <div class="eyebrow">${site.label.toUpperCase()}</div>
+        <h2>${Sim.repairing(sim) ? "Repair in progress" : !ids.length ? "No instruments on board" : "This site is complete"}</h2>
+        <p>${msg}</p>
+        ${ids.length ? `<div class="items">${ids.map((id) => `<div class="card on"><div class="card-top"><b>${item(id).name}</b><span class="chk">${done(id) ? "DONE HERE" : "WAITING"}</span></div></div>`).join("")}</div>` : ""}
+        <button class="btn primary" data-act="closeSite">Keep driving</button>`, "modal");
+    }
     setPanel(`
       <div class="eyebrow">${site.label.toUpperCase()}</div>
       <h2>Run instruments</h2>
@@ -347,24 +372,58 @@ const UI = (() => {
           : id === "drill" ? (floor ? "meets R2 and R3" : "no requirement here; R3 needs the cold trap")
           : "bonus points only";
         const useful = !done(id) && ((id === "neutron" && !r1Done) || (floor && (id === "ir" || id === "drill")));
-        return `<label class="card run ${done(id) ? "on" : ""}"><input type="checkbox" value="${id}" ${done(id) ? "disabled" : useful ? "checked" : ""}>
-          <div><b>${it.name}</b> <span class="card-stats">${it.energy} Wh · +${pts} pts${done(id) ? " · done" : ""}</span>
+        if (done(id)) return `<div class="card run on done"><div><b>${it.name}</b> <span class="chk">DONE HERE</span>
+          <div class="tag">Already ran at this site. Each instrument counts once per site.</div></div></div>`;
+        return `<label class="card run"><input type="checkbox" value="${id}" ${useful ? "checked" : ""}>
+          <div><b>${it.name}</b> <span class="card-stats">${it.energy} Wh · +${pts} pts</span>
           <div class="tag ${useful ? "good" : "muted"}">${tag}</div></div></label>`;
       }).join("")}</div>
       <p class="muted small">Pre-checked: the instruments that move a requirement forward here.</p>
-      <div class="btn-row"><button class="btn" data-act="closeSite">Leave</button><button class="btn primary" data-act="runSite">Run selected</button></div>`);
+      <div id="site-msg" class="alert soft" hidden></div>
+      <div class="btn-row"><button class="btn" data-act="closeSite">Leave</button><button class="btn primary" data-act="runSite">Run selected</button></div>`, "modal");
   }
 
   function runSite() {
     if (!siteOpen) return;
+    const site = siteOpen;
     const ids = [...document.querySelectorAll("#panel input[type=checkbox]:checked")].map((c) => c.value);
-    const events = Sim.runScience(sim, siteOpen, ids);
-    if (events.includes("noPower")) return say("Not enough power for all of that.");
+    const warn = (t) => { const m = $("#site-msg"); if (m) { m.textContent = t; m.hidden = false; } };
+    if (!ids.length) return warn("Tick at least one instrument first, or press Leave.");
+    const before = Sim.evaluate(sim);
+    const events = Sim.runScience(sim, site, ids);
+    if (events.includes("noPower")) {
+      const need = ids.reduce((e, id) => e + item(id).energy, 0);
+      return warn(`Not enough power: that needs ${fmt(need)} Wh and the battery has ${fmt(sim.stored)} Wh. Untick something.`);
+    }
+    if (events.includes("nothing")) return warn("Those instruments have already run here. Each one counts once per site.");
+    if (events.includes("repairing")) return warn(`${C.roverName} is still repairing the battery. Try again when the repair is done.`);
+    if (!events.includes("ran")) return closeSite();
+    refreshMission();
     if (events.includes("ice")) say(C.say.ice); else if (events.includes("iceIR")) say(C.say.iceIR);
-    if (ids.length) toast(`Ran ${ids.map((id) => item(id).short).join(" + ")}`);
+
+    // Results: what ran, what it earned, and what it did for the requirements.
+    const after = Sim.evaluate(sim), ran = sim.runs.filter((r) => r.site === site.id && ids.includes(r.id));
+    const pts = ran.reduce((p, r) => p + r.points, 0);
+    const newly = C.requirements.filter((q) => after.met[q.id] && !before.met[q.id]);
+    const notes = [];
+    if (newly.length) notes.push(`<div class="v ok"><span class="mark">PASS</span><div>${newly.map((q) => `<b>${q.id} ${q.title}</b>`).join(", ")} now met.</div></div>`);
+    if (ids.includes("neutron") && !after.met.R1) notes.push(`<div class="v"><span class="mark">R1</span><div><b>Hydrogen survey: ${after.progress.R1}.</b> Run the Neutron Spectrometer at one more site to finish it.</div></div>`);
+    if (after.met.R2 && !after.met.R4) notes.push(`<div class="v"><span class="mark">R4</span><div><b>Data not home yet.</b> Climb until Earth is in view to upload it.</div></div>`);
+    if (!newly.length && !notes.length) notes.push(`<div class="v"><span class="mark">INFO</span><div>Bonus science only. No requirement changed.</div></div>`);
+    setPanel(`
+      <div class="eyebrow">${site.label.toUpperCase()} · RESULTS</div>
+      <h2>+${pts} science ${sim.signal ? "sent to Earth" : "stored on board"}</h2>
+      <div class="items">${ran.map((r) => `<div class="card on"><div class="card-top"><b>${item(r.id).name}</b><span class="chk">+${r.points} PTS · ${item(r.id).energy} WH</span></div></div>`).join("")}</div>
+      <div class="verify">${notes.join("")}</div>
+      <div class="stat-row"><span>Battery now</span><b>${fmt(sim.stored)} / ${fmt(Sim.capacity(sim))} Wh</b></div>
+      ${sim.signal ? "" : `<div class="alert soft">No signal here. These results only count once ${C.roverName} is back in view of Earth.</div>`}
+      <button class="btn primary" data-act="siteDone">${sim.failurePending ? "Continue" : "Keep driving"}</button>`, "modal");
+  }
+
+  function siteDone() {
     closeSite();
-    if (events.includes("failure")) openFailure();
-    if (sim.done) finish();
+    if (sim.done) return finish();
+    if (sim.failurePending) openFailure();
   }
 
   function closeSite() { siteOpen = null; hidePanel(); World.setPaused(false); }
@@ -377,7 +436,7 @@ const UI = (() => {
     if (loadout.includes("kit")) opts.push(`<button class="btn" data-act="respond" data-id="repair">Repair: ${C.repair.hours} hours, main pack back to ${fmt(C.mainBatteryWh * C.repair.mainFraction)} Wh</button>`);
     setPanel(`<div class="alert"><div class="eyebrow">Battery cell fault</div>
       <h2>Main pack: ${fmt(C.mainBatteryWh)} → ${fmt(sim.mainCap)} Wh</h2>
-      <p>Battery now ${fmt(sim.stored)} / ${fmt(Sim.capacity(sim))} Wh. Remember the climb back out.</p>${opts.join("")}</div>`);
+      <p>Battery now ${fmt(sim.stored)} / ${fmt(Sim.capacity(sim))} Wh. Remember the climb back out.</p>${opts.join("")}</div>`, "modal");
     say(C.say.failure, { cap: fmt(sim.mainCap) });
     setTimeout(() => say(sim.backupCap ? C.say.failBackup : loadout.includes("kit") ? C.say.failKit : C.say.failNone), 2500);
   }
@@ -525,7 +584,7 @@ const UI = (() => {
         pick: () => { $("#loading").hidden = false; setTimeout(() => { pick(craterChoice === "custom" ? "custom" : craterChoice && craterChoice.id); $("#loading").hidden = true; }, 30); },
         crater: () => selectCrater(id),
         toLoadout: loadoutScreen, toggle: () => toggle(id), launch,
-        closeSite, runSite,
+        closeSite, runSite, siteDone,
         respond: () => { Sim.respond(sim, id); hidePanel(); World.setPaused(false); if (id === "repair") say("Swapping cells. Three hours."); },
       })[t.dataset.act]?.();
     });

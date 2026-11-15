@@ -116,7 +116,10 @@ const Sim = (() => {
       s.flow = { inW, outW: smooth(s.flow && s.flow.outW, outW), full: s.stored >= capacity(s) - 0.5 };
     }
 
-    if (env.shadow && !s.everShadow) { s.everShadow = true; events.push("shadow"); if (s.failureTrigger === "shadow") { fail(s); events.push("failure"); } }
+    if (env.shadow && !s.everShadow) { s.everShadow = true; events.push("shadow"); }
+    // The "shadow" fault waits until the rover is well inside the crater (env.deep), not on a
+    // small shadowed patch near the rim.
+    if (env.shadow && env.deep !== false && s.failureTrigger === "shadow" && !s.failed) { fail(s); events.push("failure"); }
     if (env.shadow !== s.inShadow) s.inShadow = env.shadow;
     if (env.signal !== s.signal) { s.signal = env.signal; events.push(env.signal ? "signalBack" : "signalLost"); }
     if (s.signal && s.pending.length) { s.uplinked.push(...s.pending); s.pending = []; events.push("uplink"); }
@@ -126,10 +129,15 @@ const Sim = (() => {
     return events;
   }
 
-  // Run instruments at a site. Returns events.
-  function runScience(s, site, ids) {
+  // Run instruments at a site. Returns events; every early exit says why.
+  // Each instrument counts once per site, and only if it was packed.
+  function runScience(s, site, requested) {
     const events = [];
-    if (s.done || repairing(s)) return events;
+    if (s.done) return ["over"];
+    if (repairing(s)) return ["repairing"];
+    const ids = [...new Set(requested)].filter((id) => s.loadout.includes(id) && item(id).kind === "instrument"
+      && !s.runs.some((r) => r.id === id && r.site === site.id));
+    if (!ids.length) return ["nothing"];
     const cost = ids.reduce((e, id) => e + item(id).energy, 0);
     if (cost > s.stored) return ["noPower"];
     ids.forEach((id) => {
@@ -142,6 +150,7 @@ const Sim = (() => {
       else if (site.kind === "floor" && id === "ir") events.push("iceIR");
     });
     drain(s, cost, "science");
+    events.push("ran");
     if (s.failureTrigger === "firstScience" && !s.failed) { fail(s); events.push("failure"); }
     return events;
   }
@@ -154,6 +163,7 @@ const Sim = (() => {
     const ran = (id, kind) => s.runs.some((r) => r.id === id && (!kind || r.kind === kind));
     const home = (id, kind) => s.uplinked.some((r) => r.id === id && r.kind === kind);
     const neutronSites = new Set(s.runs.filter((r) => r.id === "neutron").map((r) => r.site));
+    const progress = { R1: `${Math.min(2, neutronSites.size)}/2 sites` };
     const met = {
       R1: neutronSites.size >= 2,
       R2: ran("ir", "floor") || ran("drill", "floor"),
@@ -171,13 +181,20 @@ const Sim = (() => {
       R4: met.R4 ? "The cold-trap data reached Earth." : !met.R2 ? "There was no cold-trap data to send."
         : s.stuck ? `${C.roverName} ran out of power before climbing back into view of Earth. Climbing used ${Math.round(s.used.climb)} Wh.` : "The mission ended before the data was sent.",
     };
-    return { met, tier, why, score: score(s.uplinked), lostPoints: score(s.pending), used: s.used };
+    return { met, tier, why, progress, score: score(s.uplinked), lostPoints: score(s.pending), used: s.used };
   }
 
   // Forecast along the beacon route and back, without driving.
   function predict(terrain, loadout, opts = {}) {
     const s = create(terrain, loadout, { failureTrigger: opts.failure || "none" });
-    const respondIfNeeded = () => { if (s.failurePending) respond(s, "ration"); };
+    // opts.response and opts.plan let the tests try other choices than the default ones.
+    let env = { lit: 1, shadow: false, signal: true, lights: false, slopeDeg: 0 };
+    const respondIfNeeded = () => {
+      if (!s.failurePending) return;
+      const repair = opts.response === "repair" && loadout.includes("kit");
+      respond(s, repair ? "repair" : "ration");
+      if (repair) tick(s, C.repair.hours + 0.01, 0, 0, env); // parked while swapping cells
+    };
     // Waypoints: rim site and back, then down the drivable path and back up it.
     const [rim, wall, trap] = terrain.sites;
     const path = terrain.path.length ? terrain.path : [terrain.start];
@@ -197,21 +214,23 @@ const Sim = (() => {
         const lit = T_.litAt(terrain, x1, y1), shadow = lit === 0;
         const dtH = d / 1000 / kmh;
         if (shadow) shadowH += dtH;
-        tick(s, dtH, d, dh, { lit, shadow, signal: T_.signalAt(terrain, x1, y1), lights: shadow, slopeDeg: 0 });
+        const deep = T_.heightAt(terrain, x1, y1) < -200 * terrain.meta.depthKm; // more than 20 % of the way down
+        env = { lit, shadow, deep, signal: T_.signalAt(terrain, x1, y1), lights: shadow, slopeDeg: 0 };
+        tick(s, dtH, d, dh, env);
         respondIfNeeded();
       }
       // The plan that meets every requirement: Neutron on the rim and wall, ice instruments in the trap.
       const siteIdx = scienceAt[k + 1];
-      const plan = siteIdx == null ? null : [["neutron", "camera"], ["neutron"], ["ir", "drill"]][siteIdx];
+      const plan = siteIdx == null ? null : opts.plan ? opts.plan(siteIdx) : [["neutron", "camera"], ["neutron"], ["ir", "drill"]][siteIdx];
       if (plan && !s.done) {
         const site = [rim, wall, trap][siteIdx];
-        const ids = plan.filter((id) => loadout.includes(id));
+        const ids = opts.plan ? plan : plan.filter((id) => loadout.includes(id));
         if (ids.length) runScience(s, site, ids);
         respondIfNeeded();
       }
     }
     const needed = Object.values(s.used).reduce((a, b) => a + b, 0);
-    return { needed: Math.round(needed), solar: Math.round(s.solarWh), capacity: capacity(create(terrain, loadout)), used: s.used, shadowH, endStored: Math.round(s.stored), stuck: s.stuck, reachable: terrain.trapReachable, routeMaxSlope: terrain.meta.gentlestRoute.maxSlopeDeg, ...evaluate(s) };
+    return { state: s, needed: Math.round(needed), solar: Math.round(s.solarWh), capacity: capacity(create(terrain, loadout)), used: s.used, shadowH, endStored: Math.round(s.stored), stuck: s.stuck, reachable: terrain.trapReachable, routeMaxSlope: terrain.meta.gentlestRoute.maxSlopeDeg, ...evaluate(s) };
   }
 
   return { create, capacity, tick, runScience, respond, repairing, end, evaluate, predict, facts, massKg, item, applyEngineering };

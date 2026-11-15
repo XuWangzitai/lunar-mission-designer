@@ -16,8 +16,9 @@ check("Shackleton walls ~30° (Zuber 2012: 30.5°)", Math.abs(sh.wallSlopeMeanDe
 const FULL = ["neutron", "ir", "drill"];
 const SAFE = ["neutron", "drill", "backup"];
 console.log("\nForecasts (energy to visit all 3 sites and return to the start):");
+const TERR = {};
 for (const c of CRATERS) {
-  const T = Terrain.fromCrater(c);
+  const T = (TERR[c.id] = Terrain.fromCrater(c));
   const floorLit = Terrain.litAt(T, T.sites[2].x, T.sites[2].y);
   const fmt = (p) => `${p.needed}/${p.capacity}Wh→${p.stuck ? "STUCK" : p.tier}`;
   const a = Sim.predict(T, FULL), af = Sim.predict(T, FULL, { failure: "shadow" });
@@ -51,6 +52,91 @@ Sim.runScience(s2, T.sites[2], ["drill"]);
 check("cold-trap data waits for signal", Sim.evaluate(s2).met.R4 === false && s2.pending.length === 1);
 Sim.tick(s2, 0.1, 0, 0, { lit: 1, shadow: false, signal: true, lights: false });
 check("data uplinks when Earth is in view", Sim.evaluate(s2).met.R4 === true);
+
+// Science panel rules: each instrument counts once per site, only if packed, and every refusal says why.
+{
+  const T = TERR.haworth, [rim, wall, trap] = T.sites;
+  const s = Sim.create(T, ["neutron", "camera"], { failureTrigger: "none" });
+  check("first run at the rim works", Sim.runScience(s, rim, ["neutron", "camera"]).includes("ran") && Sim.evaluate(s).score === 15);
+  check("R1 shows 1/2 sites after one Neutron run", Sim.evaluate(s).progress.R1 === "1/2 sites" && !Sim.evaluate(s).met.R1);
+  const stored = s.stored;
+  check("running the same instruments again is refused, costs nothing, adds nothing",
+    Sim.runScience(s, rim, ["neutron", "camera"])[0] === "nothing" && s.stored === stored && Sim.evaluate(s).score === 15 && s.runs.length === 2);
+  check("an instrument that wasn't packed can't run", Sim.runScience(s, rim, ["drill"])[0] === "nothing" && s.runs.length === 2);
+  check("an empty selection is refused", Sim.runScience(s, rim, [])[0] === "nothing");
+  check("a duplicated selection runs once", Sim.runScience(s, wall, ["neutron", "neutron"]).includes("ran") && s.runs.filter((r) => r.site === "wall").length === 1);
+  check("R1 is met after the second site", Sim.evaluate(s).met.R1 === true);
+  s.stored = 50;
+  check("not enough power is refused without draining", Sim.runScience(s, trap, ["neutron"])[0] === "noPower" && s.stored === 50);
+  const k = Sim.create(T, ["neutron", "drill", "kit"], { failureTrigger: "firstScience" });
+  check("first science run can trigger the battery fault", Sim.runScience(k, rim, ["neutron"]).includes("failure") && k.failurePending);
+  Sim.respond(k, "repair");
+  check("instruments are offline during a repair", Sim.runScience(k, wall, ["neutron"])[0] === "repairing");
+  Sim.tick(k, CONFIG.repair.hours + 0.1, 0, 0, { lit: 1, shadow: false, signal: true, lights: false });
+  check("repair finishes and instruments work again", Sim.capacity(k) === CONFIG.mainBatteryWh * CONFIG.repair.mainFraction && Sim.runScience(k, wall, ["neutron"]).includes("ran"));
+}
+
+// Every payload that fits, with different ways of using it, failure timings and responses.
+{
+  const ids = CONFIG.items.map((i) => i.id), INSTR = CONFIG.items.filter((i) => i.kind === "instrument").map((i) => i.id);
+  const loadouts = [];
+  for (let m = 0; m < 1 << ids.length; m++) {
+    const L = ids.filter((_, i) => m & (1 << i));
+    if (L.reduce((kg, id) => kg + Sim.item(id).mass, 0) <= CONFIG.massLimit) loadouts.push(L);
+  }
+  const plans = {
+    "requirement plan": null,
+    "everything packed at every site": (L) => () => L.filter((id) => INSTR.includes(id)),
+    "ask for all items twice (packed or not)": () => () => [...ids, ...ids],
+    "cold trap only": (L) => (site) => (site === 2 ? L.filter((id) => INSTR.includes(id)) : []),
+    "run nothing": () => () => [],
+  };
+  let runs = 0, bad = 0, firstBad = "";
+  const tiers = { full: 0, partial: 0, minimum: 0, failure: 0 };
+  let stuck = 0;
+  for (const cid of ["haworth", "cabeus"]) for (const L of loadouts) for (const [pname, mk] of Object.entries(plans))
+    for (const failure of ["none", "shadow", "firstScience"]) for (const response of ["ration", "repair"]) {
+      runs++;
+      const problems = [];
+      try {
+        const p = Sim.predict(TERR[cid], L, { failure, response, plan: mk ? mk(L) : undefined }), s = p.state, cap = Sim.capacity(s);
+        const key = (r) => r.id + "@" + r.site;
+        if (!(Number.isFinite(s.stored) && s.stored >= 0 && s.stored <= cap + 1e-6)) problems.push("battery out of range");
+        if (new Set(s.runs.map(key)).size !== s.runs.length) problems.push("duplicate run");
+        if (s.runs.some((r) => !L.includes(r.id) || !INSTR.includes(r.id))) problems.push("ran an unpacked item");
+        if (s.uplinked.length + s.pending.length !== s.runs.length) problems.push("results lost or doubled");
+        if (p.score !== s.uplinked.reduce((a, r) => a + r.points, 0)) problems.push("score mismatch");
+        if (Object.values(s.used).some((v) => !Number.isFinite(v) || v < 0)) problems.push("bad energy bucket");
+        if (p.met.R1 && !L.includes("neutron")) problems.push("R1 without neutron");
+        if (p.met.R2 && !L.includes("ir") && !L.includes("drill")) problems.push("R2 without ice instrument");
+        if (p.met.R3 && !L.includes("drill")) problems.push("R3 without drill");
+        if (p.met.R4 && !p.met.R2) problems.push("R4 without R2");
+        if ((p.tier === "full") !== (p.met.R1 && p.met.R2 && p.met.R3 && p.met.R4)) problems.push("tier mismatch");
+        if (failure === "none" && s.failed) problems.push("failure fired when disabled");
+        if (s.failurePending) problems.push("failure left unanswered");
+        tiers[p.tier]++; if (p.stuck) stuck++;
+      } catch (e) { problems.push("crash: " + e.message); }
+      if (problems.length) { bad++; firstBad = firstBad || `${cid} [${L.join(",") || "empty"}] ${pname} / ${failure} / ${response}: ${problems.join("; ")}`; }
+    }
+  console.log(`\nCombination sweep: ${loadouts.length} payloads × 2 craters × 5 plans × 3 failure timings × 2 responses = ${runs} missions`);
+  console.log(`  outcomes: full ${tiers.full}, partial ${tiers.partial}, minimum ${tiers.minimum}, failure ${tiers.failure}; stranded in ${stuck}`);
+  check("every combination runs cleanly and keeps the rules", bad === 0, bad ? `${bad} bad, first: ${firstBad}` : "");
+}
+
+// The rim site's whole ring is sunlit, and the "shadow" battery fault waits for the crater interior.
+for (const c of CRATERS) {
+  const T = TERR[c.id], r = T.sites[0];
+  let dark = 0;
+  for (let dx = -600; dx <= 600; dx += 100) for (let dy = -600; dy <= 600; dy += 100) if (Math.hypot(dx, dy) <= 600 && Terrain.litAt(T, r.x + dx, r.y + dy) === 0) dark++;
+  check(`${c.name}: no permanent shadow inside the rim site ring`, dark === 0, dark ? `(${dark} dark points)` : "");
+}
+{
+  const s = Sim.create(TERR.haworth, ["neutron"], { failureTrigger: "shadow" });
+  Sim.tick(s, 0.1, 0, 0, { lit: 0, shadow: true, deep: false, signal: true, lights: true });
+  check("a shadowed patch near the rim does not trigger the battery fault", !s.failed && s.everShadow);
+  Sim.tick(s, 0.1, 0, 0, { lit: 0, shadow: true, deep: true, signal: false, lights: true });
+  check("the fault fires once the rover is deep in the crater's shadow", s.failed && s.failurePending);
+}
 
 // Rover engineering: defaults reproduce the standard rover; limits can't be broken.
 const std = Sim.applyEngineering({});
