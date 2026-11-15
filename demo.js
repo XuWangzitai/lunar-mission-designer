@@ -65,7 +65,16 @@ async function answerFault() {
   return true;
 }
 
+// Measure the game's own frame rate while driving (reported in the window title at the end).
+const fps = { frames: 0, ms: 0, on: false, last: 0 };
+(function count(now) {
+  if (fps.on && fps.last) { fps.frames++; fps.ms += now - fps.last; }
+  fps.last = now;
+  requestAnimationFrame(count);
+})(performance.now());
+
 async function driveTo(x, y, tolerance = 220) {
+  fps.on = true;
   World.setTouch("touchUp", true);
   const end = performance.now() + 40000;
   while (performance.now() < end) {
@@ -76,6 +85,7 @@ async function driveTo(x, y, tolerance = 220) {
     await wait(30);
   }
   World.setTouch("touchUp", false);
+  fps.on = false;
 }
 
 async function runAt(ids, hold = 1800) {
@@ -178,6 +188,9 @@ async function play() {
   mark("end card");
   await wait(2000);
   mark("done");
+  const driveFps = fps.ms ? Math.round((fps.frames * 1000) / fps.ms) : 0;
+  window.__demo.driveFps = driveFps;
+  document.title = `Lunar Mission Designer demo · driving ${driveFps} fps`;
   window.__demo.done = true;
 }
 
