@@ -31,7 +31,7 @@ Lunar Mission Designer is a 3D browser game where players plan and drive a robot
 **Use of AI.** We used Claude (Anthropic), through the Claude Code desktop app, to read the challenge brief and resources, find NASA data sources, discuss game design, generate the game and data-processing code (HTML/CSS/JavaScript, Three.js, Node.js), write tests, and draft documentation, including this text. The team made the design decisions (robotic rover, first-person view, real crater data, crater picker and custom-crater prediction, keyboard driving, the rover's character voice), play-tested the game, and approved what was published. AI-generated code is acknowledged in the repository README and AI_LOG.md. No AI-generated images, video or audio are used, and no NASA logos or branding appear in the game.
 
 ## Project Demonstration
-*(To add: public link to a ≤30-second video)*
+https://xuwangzitai.github.io/lunar-mission-designer/demo/lunar-mission-designer-demo.mp4 (28.6 s screen recording of the `?demo=1` run, no audio)
 
 ## Project
 https://xuwangzitai.github.io/lunar-mission-designer/
