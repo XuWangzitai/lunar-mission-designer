@@ -3,7 +3,7 @@
 // All values are FICTIONAL game-balance numbers unless marked REAL.
 
 const CONFIG = {
-  roverName: "LUMI",
+  roverName: "THOX",
   missionName: "Shackleton Shadow Survey",
 
   massLimit: 35,            // kg of payload the rover can carry
@@ -61,7 +61,7 @@ const CONFIG = {
     {
       id: "kit", kind: "support", name: "Repair Kit", short: "Repair kit",
       mass: 3, helps: [],
-      what: "Spare cells and tools. If the main battery fails, LUMI can spend a shift swapping cells.",
+      what: "Spare cells and tools. If the main battery fails, THOX can spend a shift swapping cells.",
       why: "Light, but fixing things takes time. Restores the main pack to 800 Wh.",
     },
   ],
@@ -79,9 +79,9 @@ const CONFIG = {
     failure: { label: "MISSION FAILURE", line: "We didn't meet a single requirement. Let's figure out why and go again." },
   },
 
-  // Rover lines. LUMI is a partner, not a system log. Rewrite these in your own voice.
+  // Rover lines. THOX is a partner, not a system log. Rewrite these in your own voice.
   say: {
-    title:        "Systems online. I'm LUMI. I'll be your eyes at the lunar south pole.",
+    title:        "Systems online. I'm THOX. I'll be your eyes at the lunar south pole.",
     briefing:     "Mission control picked a crater that hasn't seen sunlight in a very long time. If there's ice anywhere on the Moon, it's in places like this.",
     loadout:      "Pack me carefully. I can carry 35 kilograms, and I'm the one who'll be out in the cold.",
     overMass:     "That's more than I can carry. Something has to stay home.",

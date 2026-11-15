@@ -1,4 +1,4 @@
-// Screens, HUD and LUMI's voice. Reads rules from Game, draws through Scene.
+// Screens, HUD and the rover's voice. Reads rules from Game, draws through Scene.
 
 const UI = (() => {
   const C = CONFIG;
@@ -11,7 +11,7 @@ const UI = (() => {
   let heatersOff = false;
   let maxCap = C.mainBattery;
 
-  // ---------- LUMI speech (typewriter, queued) ----------
+  // ---------- rover speech (typewriter, queued) ----------
   let sayToken = 0;
   function say(lines) {
     const queue = (Array.isArray(lines) ? lines : [lines]).filter(Boolean);

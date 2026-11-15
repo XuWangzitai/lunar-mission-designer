@@ -266,7 +266,7 @@ function drive(dt) {
     if (steep > C.maxSlopeDeg + 3) {
       if (now - state.lastWarn > 3500) { state.lastWarn = now; emit(slope > 0 ? "tooSteepUp" : "tooSteepDown", steep.toFixed(0)); }
     } else {
-      // Between the safe limit and 3° past it, LUMI creeps and complains.
+      // Between the safe limit and 3° past it, the rover creeps and complains.
       if (steep > C.maxSlopeDeg) { speed *= 0.4; if (now - state.lastWarn > 3500) { state.lastWarn = now; emit("creep", steep.toFixed(0)); } }
       const step = speed * Math.abs(throttle) * dt * dir;
       const nx = state.x + dx * step, ny = state.y + dy * step;

@@ -2,7 +2,7 @@
 // Re-run `node tests/run-tests.js` after changing numbers.
 
 const CONFIG = {
-  roverName: "LUMI",
+  roverName: "THOX",
 
   // Physics
   gMoon: 1.62,                 // m/s², REAL lunar surface gravity

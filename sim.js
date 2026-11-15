@@ -166,10 +166,10 @@ const Sim = (() => {
       R1: met.R1 ? `Neutron Spectrometer ran at: ${[...neutronSites].join(", ")}.`
         : !has("neutron") ? "The Neutron Spectrometer wasn't packed." : `It ran at ${neutronSites.size} site(s); 2 were needed.`,
       R2: met.R2 ? "Ice instruments ran at the cold trap."
-        : !has("ir") && !has("drill") ? "Neither the IR Spectrometer nor the Drill was packed." : "LUMI never ran an ice instrument at the cold trap.",
+        : !has("ir") && !has("drill") ? "Neither the IR Spectrometer nor the Drill was packed." : `${C.roverName} never ran an ice instrument at the cold trap.`,
       R3: met.R3 ? "The Drill reached buried ice in the cold trap." : !has("drill") ? "The Drill wasn't packed." : "The Drill never ran at the cold trap.",
       R4: met.R4 ? "The cold-trap data reached Earth." : !met.R2 ? "There was no cold-trap data to send."
-        : s.stuck ? `LUMI ran out of power before climbing back into view of Earth. Climbing used ${Math.round(s.used.climb)} Wh.` : "The mission ended before the data was sent.",
+        : s.stuck ? `${C.roverName} ran out of power before climbing back into view of Earth. Climbing used ${Math.round(s.used.climb)} Wh.` : "The mission ended before the data was sent.",
     };
     return { met, tier, why, score: score(s.uplinked), lostPoints: score(s.pending), used: s.used };
   }

@@ -10,7 +10,7 @@ const UI = (() => {
   const terrainCache = {};
   let customParams = { name: "My crater", diameterKm: 30, depthKm: 2.5, wallSlopeDeg: 12, floorTempK: 50, icePct: 3 };
 
-  // ---------- LUMI ----------
+  // ---------- rover voice ----------
   let sayToken = 0;
   function say(text, vars = {}) {
     const line = text.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
@@ -64,7 +64,7 @@ const UI = (() => {
       <p class="lead">Pick a real crater at the Moon's south pole, pack your rover, and drive it into permanent shadow to look for ice. The terrain is real: it comes from NASA's Lunar Reconnaissance Orbiter laser altimeter.</p>
       <button class="btn primary" data-act="briefing">Start mission briefing</button>
       <p class="fine">Physics and crater data are real where marked; power and science values are game values. Not affiliated with or endorsed by NASA. <a href="v1/">Play v1 (2D)</a></p>`, "hero");
-    say("Hi, I'm LUMI. Let's go find some ice.");
+    say(`Hi, I'm ${C.roverName}. Let's go find some ice.`);
   }
 
   const why = (k) => `<details class="why"><summary>Why? ${C.learn[k].title}</summary><p>${C.learn[k].text}</p></details>`;
@@ -405,7 +405,7 @@ const UI = (() => {
     setPanel(`
       <div class="eyebrow">MISSION REPORT · ${terrain.meta.name.toUpperCase()}</div>
       <h1 class="tier tier-${r.tier}">${t.label}</h1>
-      <p class="lead">${sim.stuck ? "LUMI ran out of power in the crater. " : ""}${t.line}</p>
+      <p class="lead">${sim.stuck ? `${C.roverName} ran out of power in the crater. ` : ""}${t.line}</p>
       <div class="scoreline"><span>Science returned<b>${r.score}</b></span>${r.lostPoints ? `<span class="bad">Never reached Earth: ${r.lostPoints}</span>` : ""}</div>
       <h3>Requirements check</h3>
       <div class="verify">${C.requirements.map((q) => `<div class="v ${r.met[q.id] ? "ok" : "no"}"><span class="mark">${r.met[q.id] ? "PASS" : "FAIL"}</span>
