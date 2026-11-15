@@ -231,7 +231,7 @@ const UI = (() => {
   // ---------- driving ----------
   let siteOpen = null, lastLowWarn = false;
   function launch() {
-    sim = Sim.create(terrain, loadout);
+    sim = Sim.create(terrain, loadout, C.forceFailure ? { failureTrigger: C.forceFailure } : {}); // demo mode fixes the fault timing
     hidePanel();
     $("#hud").hidden = false;
     drawMinimap();
@@ -272,9 +272,14 @@ const UI = (() => {
     if (Sim.repairing(sim)) return `Repairing the main pack: <b>${Math.max(0, sim.repairUntilH - sim.timeH).toFixed(1)} h</b> left. ${C.roverName} can't drive or run instruments until it's done.`;
     if (!loadout.some((id) => item(id).kind === "instrument")) return `No instruments on board, so no requirement can be met. Press <b>End mission</b> and change the payload.`;
     let target = null;
-    if (has("neutron") && !met.R1 && !ran("neutron", "rim")) target = rim;
+    // R1 needs Neutron at any 2 sites, so never send the player back to a site they skipped.
+    const neutronSites = new Set(sim.runs.filter((r) => r.id === "neutron").map((r) => r.site)).size;
+    const iceLeft = ["ir", "drill"].some((id) => has(id) && !ran(id, "floor")) && T.trapReachable;
+    const dist = (s) => Math.hypot(s.x - h.x, s.y - h.y);
+    if (has("neutron") && !met.R1 && neutronSites === 0) target = [rim, wall].sort((a, b) => dist(a) - dist(b))[0];
     else if (has("neutron") && !met.R1 && !ran("neutron", "wall")) target = wall;
-    else if (["ir", "drill"].some((id) => has(id) && !ran(id, "floor")) && T.trapReachable) target = trap;
+    else if (iceLeft) target = trap;
+    else if (has("neutron") && !met.R1) target = [rim, wall, trap].find((s) => !ran("neutron", s.id) && (s !== trap || T.trapReachable)) || null;
     if (target) {
       if (near && near.id === target.id) return `You're at the <b>${target.label}</b>. Press <kbd>E</kbd> to run instruments.`;
       const dx = target.x - h.x, dy = target.y - h.y;
@@ -295,7 +300,7 @@ const UI = (() => {
   const shown = new Set();
   let explainTimer;
   function explain(k) {
-    if (shown.has(k)) return;
+    if (shown.has(k) || C.demo) return;
     shown.add(k);
     $("#explain-t").textContent = C.learn[k].title;
     $("#explain-p").textContent = C.learn[k].text;
