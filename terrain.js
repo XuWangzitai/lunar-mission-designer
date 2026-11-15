@@ -40,9 +40,10 @@ const Terrain = (() => {
       else z = depth * 0.04 * Math.exp(-(r - R) / (R * 0.3));
       h[j * n + i] = z + (r < rf ? wobble * 0.2 : wobble);
     }
+    const actual = +(Math.atan(depth / (R - rf)) / deg).toFixed(1); // geometry may force steeper walls than asked
     const meta = {
       id: "custom", name: p.name || "Custom crater", custom: true, diameterKm: p.diameterKm, depthKm: p.depthKm,
-      wallSlopeMeanDeg: p.wallSlopeDeg, gentlestRoute: { maxSlopeDeg: p.wallSlopeDeg }, floorTempK: p.floorTempK, iceFactor: p.iceFactor,
+      wallSlopeMeanDeg: actual, gentlestRoute: { maxSlopeDeg: actual }, floorTempK: p.floorTempK, iceFactor: p.iceFactor,
     };
     return finish({ n, cell, h, half, routeDir: { x: 0, y: -1 }, floor: { x: 0, y: 0 }, meta });
   }

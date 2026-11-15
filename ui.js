@@ -110,6 +110,12 @@ const UI = (() => {
       ${row("wallSlopeDeg", "Wall slope", 4, 35, 1, "°")}
       ${row("floorTempK", "Floor temperature", 25, 150, 1, "K")}
       ${row("icePct", "Ice in the soil", 0, 10, 0.5, "%")}
+      ${(() => {
+        const minDeg = Math.atan(p.depthKm / (p.diameterKm / 2 * 0.95)) * 180 / Math.PI;
+        return minDeg > p.wallSlopeDeg
+          ? `<div class="alert soft">A ${p.depthKm} km drop inside a ${p.diameterKm} km crater needs walls of at least ${minDeg.toFixed(0)}°, so the walls will be steeper than you asked.</div>`
+          : "";
+      })()}
       <p class="fine">Tip: try Shackleton's real numbers (21 km, 4.1 km, 30°) and see what the rover can do.</p>
     </div>`;
   }
