@@ -99,8 +99,8 @@ const Terrain = (() => {
     // Land just outside the rim near the gentlest route, on flat ground that can see Earth
     // (NASA weighs communications when choosing landing regions).
     let start = null;
-    for (const rf of [1.12, 1.2, 1.3, 1.45]) {
-      for (const da of [0, 10, -10, 20, -20, 30, -30, 45, -45]) {
+    for (const rf of [1.12, 1.2, 1.3, 1.45, 1.6]) {
+      for (const da of [0, 10, -10, 20, -20, 30, -30, 45, -45, 60, -60, 75, -75, 90, -90]) {
         const a0 = Math.atan2(T.routeDir.y, T.routeDir.x) + da * deg;
         const p = { x: Math.cos(a0) * R * rf, y: Math.sin(a0) * R * rf };
         if (Math.abs(p.x) < T.half && Math.abs(p.y) < T.half && signalAt(T, p.x, p.y) && litAt(T, p.x, p.y) >= 0.5 && maxSlope(T, p.x, p.y) < 8) { start = p; break; }
@@ -129,12 +129,13 @@ const Terrain = (() => {
     T.trapReachable = trapOk;
     T.path = path;
     const wall = path[Math.floor(path.length / 2)] || start;
-    // Rim site: sunlit, in view of Earth, flat, a few km from the landing spot, drivable.
+    // Rim site: sunlit, in view of Earth, flat, drivable, and close (1.5–4 km) to the landing
+    // spot, preferring a spot along the rim rather than toward the crater.
     let rimSite = null;
-    const a0 = Math.atan2(start.y, start.x), r0 = Math.hypot(start.x, start.y);
-    for (const da of [12, -12, 20, -20, 30, -30, 45, -45]) {
-      for (const rr of [1, 1.08, 0.95]) {
-        const p = { x: Math.cos(a0 + da * deg) * r0 * rr, y: Math.sin(a0 + da * deg) * r0 * rr };
+    const along = Math.atan2(start.y, start.x) + Math.PI / 2;
+    for (const d of [2500, 2000, 3000, 1500, 4000]) {
+      for (const da of [0, 180, 30, 210, -30, 150, 60, 240, -60, 120, 90, 270]) {
+        const a = along + da * deg, p = { x: start.x + Math.cos(a) * d, y: start.y + Math.sin(a) * d };
         if (Math.abs(p.x) > T.half * 0.95 || Math.abs(p.y) > T.half * 0.95) continue;
         if (litAt(T, p.x, p.y) >= 0.5 && signalAt(T, p.x, p.y) && maxSlope(T, p.x, p.y) < 10 && findPath(T, start, p, C.maxSlopeDeg).reached) { rimSite = p; break; }
       }

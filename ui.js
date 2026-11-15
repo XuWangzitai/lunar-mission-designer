@@ -62,9 +62,37 @@ const UI = (() => {
       <div class="eyebrow">NASA SPACE APPS 2026 · TEAM THEGOATTHOX</div>
       <h1>Lunar Mission Designer</h1>
       <p class="lead">Pick a real crater at the Moon's south pole, pack your rover, and drive it into permanent shadow to look for ice. The terrain is real: it comes from NASA's Lunar Reconnaissance Orbiter laser altimeter.</p>
-      <button class="btn primary" data-act="pick">Choose a crater</button>
+      <button class="btn primary" data-act="briefing">Start mission briefing</button>
       <p class="fine">Physics and crater data are real where marked; power and science values are game values. Not affiliated with or endorsed by NASA. <a href="v1/">Play v1 (2D)</a></p>`, "center");
     say("Hi, I'm LUMI. Let's go find some ice.");
+  }
+
+  const why = (k) => `<details class="why"><summary>Why? ${C.learn[k].title}</summary><p>${C.learn[k].text}</p></details>`;
+
+  function briefing() {
+    $("#hud").hidden = true;
+    setPanel(`
+      <div class="eyebrow">MISSION BRIEFING</div>
+      <h2>Find out whether there is water ice in a permanently shadowed crater, and get the proof home.</h2>
+      ${why("coldTrap")}
+      <h3>Your requirements</h3>
+      <div class="reqs">${C.requirements.map((r) => `<div class="req"><span class="req-id">${r.id}</span><div><b>${r.title}</b>: ${r.text}<br><span class="muted small">${r.why}</span></div></div>`).join("")}</div>
+      <h3>How a mission goes</h3>
+      <ol class="steps">
+        <li><b>Choose a crater</b>, a real one measured by NASA, or build your own.</li>
+        <li><b>Pack the rover</b> within 35 kg and check the energy forecast.</li>
+        <li><b>Survey the rim</b> (amber pillar near the landing site): drive into the ring and press <kbd>E</kbd>.</li>
+        <li><b>Follow the blue beacons</b> down the safe route to the wall site and the <b>cold trap</b> (blue pillar).</li>
+        <li><b>Climb back out</b> until Earth is in view, so your data uploads. Then press <b>End mission</b>.</li>
+      </ol>
+      <h3>Controls</h3>
+      <div class="controls">
+        <span><kbd>W</kbd><kbd>S</kbd> or <kbd>↑</kbd><kbd>↓</kbd> drive</span><span><kbd>A</kbd><kbd>D</kbd> or <kbd>←</kbd><kbd>→</kbd> steer</span>
+        <span><kbd>E</kbd> science at a site</span><span><kbd>M</kbd> map</span><span><kbd>H</kbd> headlights</span><span><kbd>C</kbd> camera</span>
+      </div>
+      <p class="muted small">Watch the battery: the Sun barely rises here, the shadow has no solar power, and something will go wrong.</p>
+      <button class="btn primary" data-act="pick">Choose a crater</button>`, "center wide");
+    say("Read this first. Then pick where we're going.");
   }
 
   function pick(selectedId) {
@@ -87,6 +115,7 @@ const UI = (() => {
       <div class="eyebrow">STEP 1 · CHOOSE A CRATER</div>
       <h2>Lunar south pole</h2>
       <p class="muted small">Values tagged <i>LOLA</i> were measured by this game from NASA LRO laser-altimeter maps. Our Shackleton numbers match NASA's published 4.1 km depth and ~30° walls.</p>
+      ${why("lola")}${why("lcross")}${why("slope")}
       <label class="slider">Rover max safe slope <b id="maxslope-v">${C.maxSlopeDeg}°</b>
         <input type="range" min="8" max="30" value="${C.maxSlopeDeg}" data-act="maxslope"></label>
       <div class="items">${cards}
@@ -165,6 +194,7 @@ const UI = (() => {
       <div class="stat-row"><span><i class="dot inst"></i>Science</span><b>${fmt(u.science)} Wh</b></div>
       <div class="stat-row"><span>☀ Solar gained on the way</span><b>+${fmt(p.solar)} Wh</b></div>
       <div class="stat-row"><span>Battery</span><b>${fmt(p.capacity)} Wh</b></div>
+      ${why("climb")}
       <div class="forecast">
         <div><span>No failure</span>${outcome(p)}</div>
         <div><span>Battery fails in the shadow</span>${outcome(pf)}</div>
@@ -189,18 +219,21 @@ const UI = (() => {
     $("#hud").hidden = false;
     drawMinimap();
     World.start(sim, { onEvent, onHud });
+    shown.clear();
+    $("#explain").hidden = true;
     say(C.say.start);
+    toast("Hold W or ↑ to drive · A/D to steer · M for the map");
     lastLowWarn = false;
   }
 
   function onEvent(name, data) {
     const map = {
       edge: () => say(C.say.edge, { slope: data, max: C.maxSlopeDeg }),
-      tooSteepUp: () => say(C.say.tooSteepUp, { slope: data }),
-      tooSteepDown: () => say(C.say.tooSteepDown, { slope: data }),
-      creep: () => say(C.say.creep, { slope: data }),
-      shadow: () => say(C.say.shadow),
-      signalLost: () => say(C.say.signalLost),
+      tooSteepUp: () => { say(C.say.tooSteepUp, { slope: data }); explain("slope"); },
+      tooSteepDown: () => { say(C.say.tooSteepDown, { slope: data }); explain("slope"); },
+      creep: () => { say(C.say.creep, { slope: data }); explain("slope"); },
+      shadow: () => { say(C.say.shadow); explain("shadow"); },
+      signalLost: () => { say(C.say.signalLost); explain("signal"); },
       signalBack: () => say(C.say.signalBack),
       uplink: () => toast("📡 Data uplinked to Earth"),
       near: () => { if (data) { say(C.say.site); toast(`${data.label}: press E`); } },
@@ -214,7 +247,47 @@ const UI = (() => {
     if (sim.done) finish();
   }
 
+  // What should the player do next? Derived from what's packed and what's done.
+  function nextStep(h) {
+    const T = terrain, [rim, wall, trap] = T.sites, has = (id) => loadout.includes(id);
+    const ran = (id, site) => sim.runs.some((r) => r.id === id && r.site === site);
+    const met = Sim.evaluate(sim).met, near = World.nearSite();
+    let target = null;
+    if (has("neutron") && !met.R1 && !ran("neutron", "rim")) target = rim;
+    else if (has("neutron") && !met.R1 && !ran("neutron", "wall")) target = wall;
+    else if (["ir", "drill"].some((id) => has(id) && !ran(id, "floor")) && T.trapReachable) target = trap;
+    if (target) {
+      if (near && near.id === target.id) return `You're at the <b>${target.label}</b>. Press <kbd>E</kbd> to run instruments.`;
+      const dx = target.x - h.x, dy = target.y - h.y;
+      let rel = Math.atan2(dx, dy) - h.heading;
+      rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+      const arrow = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"][(Math.round(rel / (Math.PI / 4)) + 8) % 8];
+      return `Next: <b>${target.label}</b> · ${(Math.hypot(dx, dy) / 1000).toFixed(1)} km <span class="arrow">${arrow}</span>${target.id === "rim" ? " · amber pillar" : " · follow the blue beacons"}`;
+    }
+    if (sim.pending.length) {
+      const d = Math.hypot(T.start.x - h.x, T.start.y - h.y) / 1000;
+      return `Climb back toward the landing site (${d.toFixed(1)} km) until Earth is in view to upload ${sim.pending.length} result(s).`;
+    }
+    if (!T.trapReachable && !met.R2) return `No safe route reaches the cold trap at ${C.maxSlopeDeg}°. Finish what you can, then press <b>End mission</b>.`;
+    return `Everything you can do is done. Press <b>End mission</b> for your report.`;
+  }
+
+  // One-time "Why?" cards during the drive.
+  const shown = new Set();
+  let explainTimer;
+  function explain(k) {
+    if (shown.has(k)) return;
+    shown.add(k);
+    $("#explain-t").textContent = C.learn[k].title;
+    $("#explain-p").textContent = C.learn[k].text;
+    $("#explain").hidden = false;
+    clearTimeout(explainTimer);
+    explainTimer = setTimeout(() => { $("#explain").hidden = true; }, 16000);
+  }
+
   function onHud(h) {
+    $("#h-next").innerHTML = nextStep(h);
+    if (sim.flow && sim.flow.full && sim.flow.inW > sim.flow.outW && h.speedKmh > 0) explain("full");
     const cap = Sim.capacity(sim), pct = sim.stored / cap;
     if (pct < 0.2 && !lastLowWarn) { lastLowWarn = true; say(C.say.lowPower); }
     $("#h-batt").textContent = `${fmt(sim.stored)} / ${fmt(cap)} Wh`;
@@ -251,9 +324,17 @@ const UI = (() => {
       <p class="muted small">Battery ${fmt(sim.stored)} Wh. ${sim.signal ? "Earth in view: results upload immediately." : "No signal: results are stored until you climb back into view of Earth."}</p>
       <div class="items">${ids.map((id) => {
         const it = item(id), pts = Math.round(it.points[site.kind] * (site.kind === "floor" && (id === "ir" || id === "drill") ? sim.facts.iceFactor : 1));
-        return `<label class="card run ${done(id) ? "on" : ""}"><input type="checkbox" value="${id}" ${done(id) ? "disabled" : ""}>
-          <b>${it.name}</b> <span class="card-stats">${it.energy} Wh · +${pts} pts${done(id) ? " · done" : ""}</span></label>`;
+        const floor = site.kind === "floor", r1Done = Sim.evaluate(sim).met.R1;
+        const tag = id === "neutron" ? (r1Done ? "R1 already done; bonus points only" : "counts toward R1 (needs 2 sites)")
+          : id === "ir" ? (floor ? "meets R2" : "no requirement here; R2 needs the cold trap")
+          : id === "drill" ? (floor ? "meets R2 and R3" : "no requirement here; R3 needs the cold trap")
+          : "bonus points only";
+        const useful = !done(id) && ((id === "neutron" && !r1Done) || (floor && (id === "ir" || id === "drill")));
+        return `<label class="card run ${done(id) ? "on" : ""}"><input type="checkbox" value="${id}" ${done(id) ? "disabled" : useful ? "checked" : ""}>
+          <div><b>${it.name}</b> <span class="card-stats">${it.energy} Wh · +${pts} pts${done(id) ? " · done" : ""}</span>
+          <div class="tag ${useful ? "good" : "muted"}">${tag}</div></div></label>`;
       }).join("")}</div>
+      <p class="muted small">Pre-checked: the instruments that move a requirement forward here.</p>
       <div class="btn-row"><button class="btn" data-act="closeSite">Leave</button><button class="btn primary" data-act="runSite">Run selected</button></div>`);
   }
 
@@ -422,6 +503,7 @@ const UI = (() => {
       if (!t || t.disabled || t.tagName === "INPUT") return;
       const id = t.dataset.id;
       ({
+        briefing,
         pick: () => { $("#loading").hidden = false; setTimeout(() => { pick(craterChoice === "custom" ? "custom" : craterChoice && craterChoice.id); $("#loading").hidden = true; }, 30); },
         crater: () => selectCrater(id),
         toLoadout: loadoutScreen, toggle: () => toggle(id), launch,
@@ -452,6 +534,7 @@ const UI = (() => {
     $("#btn-map").addEventListener("click", openMap);
     $("#minimap").addEventListener("click", openMap);
     $("#bigmap-close").addEventListener("click", closeMap);
+    $("#explain-x").addEventListener("click", () => { $("#explain").hidden = true; });
     $("#bigmap-signal").addEventListener("change", redrawBigMap);
     window.addEventListener("keydown", (e) => {
       if (e.code === "KeyM" && !$("#hud").hidden) $("#bigmap").hidden ? openMap() : closeMap();

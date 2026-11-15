@@ -270,3 +270,26 @@ p { line-height: 1.5; margin: 0 0 12px; }
 .toggle-row input { accent-color: var(--cyan); }
 #bigmap-dist div { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
 @media (max-width: 760px) { .bigmap-body { grid-template-columns: 1fr; } }
+
+/* guidance */
+.nextstep { position: absolute; left: 50%; top: 40px; transform: translateX(-50%); max-width: min(640px, calc(100% - 260px)); padding: 8px 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 14px; text-align: center; pointer-events: none; }
+.nextstep .arrow { display: inline-block; font-size: 18px; color: var(--cyan); font-weight: 700; }
+kbd { font-family: var(--mono); font-size: 12px; padding: 1px 6px; border: 1px solid rgba(255,255,255,.3); border-bottom-width: 2px; border-radius: 5px; background: rgba(255,255,255,.06); margin: 0 1px; }
+.explain { position: absolute; left: 18px; bottom: 110px; width: min(360px, calc(100% - 36px)); padding: 12px 14px; background: var(--panel);
+  border: 1px solid #ffb54766; border-left: 3px solid var(--amber); border-radius: 10px; font-size: 13px; line-height: 1.45; }
+.explain[hidden] { display: none; }
+.explain .eyebrow { color: var(--amber); display: flex; justify-content: space-between; }
+.explain button { background: none; border: 0; color: var(--muted); font-size: 18px; cursor: pointer; line-height: 1; }
+.explain p { margin: 6px 0 0; color: #cfdae3; }
+details.why { margin: 10px 0; padding: 8px 12px; border: 1px solid #ffb54744; border-radius: 10px; background: rgba(255,181,71,.05); font-size: 13px; }
+details.why summary { cursor: pointer; color: var(--amber); font-weight: 600; }
+details.why p { margin: 8px 0 2px; color: #cfdae3; }
+ol.steps { padding-left: 20px; font-size: 14px; line-height: 1.6; margin: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: #cfdae3; }
+.tag { font-size: 12px; margin-top: 2px; }
+.tag.good { color: var(--green); }
+@media (max-width: 760px) {
+  .nextstep { top: 168px; max-width: calc(100% - 32px); font-size: 12px; }
+  .explain { bottom: auto; top: 220px; }
+}

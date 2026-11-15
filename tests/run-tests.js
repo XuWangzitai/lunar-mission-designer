@@ -30,6 +30,9 @@ for (const c of CRATERS) {
   }
   console.log(`  ${c.name.padEnd(11)} ${T.trapReachable ? "REACHABLE  " : "UNREACHABLE"} path ${pathKm.toFixed(1)} km, steepest step ${steepest.toFixed(1)}°, trap ${(-T.sites[2].z).toFixed(0)} m down, shadow ${a.shadowH.toFixed(1)} h | MAX ${fmt(a)} fail:${fmt(af)} | SAFE ${fmt(b)} fail:${fmt(bf)}`);
   check(`${c.name}: cold trap is in permanent shadow`, floorLit === 0);
+  const rimKm = Math.hypot(T.sites[0].x - T.start.x, T.sites[0].y - T.start.y) / 1000;
+  check(`${c.name}: landing and rim site are sunlit with Earth in view; rim site within 4 km`,
+    Terrain.litAt(T, T.start.x, T.start.y) >= 0.5 && Terrain.litAt(T, T.sites[0].x, T.sites[0].y) >= 0.5 && Terrain.signalAt(T, T.sites[0].x, T.sites[0].y) && rimKm > 0.5 && rimKm <= 4, `(${rimKm.toFixed(1)} km)`);
   check(`${c.name}: beacon path never exceeds the rover's slope limit`, steepest <= CONFIG.maxSlopeDeg + 0.01);
 }
 

@@ -47,11 +47,23 @@ const CONFIG = {
   massLimit: 35,
 
   requirements: [
-    { id: "R1", title: "Hydrogen survey", text: "Run the Neutron Spectrometer at 2 different sites." },
-    { id: "R2", title: "Ice detected", text: "Run the IR Spectrometer or Drill at the cold trap." },
-    { id: "R3", title: "Ice confirmed at depth", text: "Run the Drill at the cold trap." },
-    { id: "R4", title: "Data returned", text: "Get the cold-trap data back to Earth (climb until you have signal)." },
+    { id: "R1", title: "Hydrogen survey", text: "Run the Neutron Spectrometer at 2 different sites.", why: "Hydrogen is a clue to water. Measuring at two places shows how it changes toward the crater." },
+    { id: "R2", title: "Ice detected", text: "Run the IR Spectrometer or Drill at the cold trap.", why: "The cold trap is where ice can survive, so that's where you look." },
+    { id: "R3", title: "Ice confirmed at depth", text: "Run the Drill at the cold trap.", why: "Surface frost could be thin; only a drill sample proves ice is buried in the soil." },
+    { id: "R4", title: "Data returned", text: "Get the cold-trap data back to Earth (climb until you have signal).", why: "Science that never reaches Earth doesn't count. The crater wall blocks the radio." },
   ],
+
+  // Short "Why?" explainers. Facts here are real; sources in README.
+  learn: {
+    coldTrap: { title: "Why are polar craters so cold?", text: "The Moon's spin axis is tilted only about 1.5°, so at the poles the Sun always skims the horizon. The floors of deep craters never get direct sunlight. NASA's Diviner instrument measured spots near 38 K (−235 °C) in Cabeus, cold enough to trap water ice for a very long time." },
+    lola: { title: "Where does this terrain come from?", text: "NASA's Lunar Reconnaissance Orbiter has circled the Moon since 2009. Its laser altimeter, LOLA, times laser echoes to measure surface height. Every crater here is built from LOLA's south-pole map, one height every 240 m." },
+    lcross: { title: "What did LCROSS find?", text: "In 2009 NASA crashed a spent rocket stage into Cabeus and flew a probe through the debris plume. It measured about 5.6 % water ice by mass: the strongest evidence yet for ice in a polar cold trap." },
+    shadow: { title: "Why does the shadow cost so much power?", text: "No sunlight means no solar power, and it is extremely cold, so heaters must run to keep the electronics alive. Every hour in the dark drains the battery, even when you're parked." },
+    signal: { title: "Why did we lose contact?", text: "Radio needs a straight line to Earth. From the south pole, Earth hangs just above the horizon, so crater walls block it. Real missions plan for these blackouts or use relay satellites." },
+    slope: { title: "Why can't the rover drive steeper?", text: "Loose lunar soil starts sliding at about 30–35° (its angle of repose; Shackleton's walls are close to that). Rovers are designed for much gentler slopes so they don't slip or tip over." },
+    climb: { title: "Why is climbing out so expensive?", text: "Lifting the rover back up takes energy E = m·g·h. A 283 kg rover climbing 2.5 km in lunar gravity (1.62 m/s²) needs about 320 Wh at the wheels. With 50 % efficient motors, that's about 640 Wh from the battery." },
+    full: { title: "Why isn't the battery charging?", text: "It's already full. Sunlight beyond what the battery can store is simply wasted. A bigger battery, not more sunlight, is what lets you work longer in the dark." },
+  },
 
   tiers: {
     full: { label: "FULL SUCCESS", line: "Ice confirmed and the data is home. The next mission will know exactly where to dig." },
