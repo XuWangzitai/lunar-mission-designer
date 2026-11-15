@@ -205,3 +205,58 @@ Target: M1–M4 by Sunday early afternoon, M5–M6 by late afternoon, M7–M8 Su
 - Briefing paragraph (why this crater matters)
 - Failure alert wording
 - Debrief closing line for each outcome tier
+
+---
+
+# v2 Plan: 3D driving on real NASA crater terrain (drafted Nov 14 evening)
+
+## Goals (from play-testing v1)
+- Drive the rover yourself with the keyboard, in 3D
+- Warning at the crater edge, then descend along the gentlest slope
+- Live HUD while moving: battery, requirements checklist, slope, signal
+- **Real NASA crater data**, a **crater picker before launch**, and a **custom crater** mode where players type in their own values to predict how a mission would go
+
+## NASA data sources (real)
+| Source | What we take from it | URL |
+|---|---|---|
+| LRO LOLA polar elevation map `ldem_75s_240m.img` (29 MB, 240 m/pixel) | The actual 3D terrain of each crater; depth = rim − floor | https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/ |
+| LRO LOLA polar slope map `ldsm_75s_240m.img` (29 MB) | Wall slopes; the gentlest route into each crater | same folder |
+| USGS/IAU Gazetteer of Planetary Nomenclature (NASA-funded) | Official crater names, centers, diameters | https://planetarynames.wr.usgs.gov/ |
+| Zuber et al. 2012, "Constraints on the volatile distribution within Shackleton crater" (NASA NTRS) | Shackleton: depth 4.1 ± 0.05 km, avg wall slope 30.5°, max 35°, floor ≈ 7 km | https://ntrs.nasa.gov/api/citations/20120013758/downloads/20120013758.pdf |
+| LCROSS results (Colaprete et al. 2010, Science) | Cabeus: 5.6 ± 2.9 % water ice by mass in the impact plume | https://science.nasa.gov/mission/lcross/ |
+| Diviner (Paige et al. 2010, Science) | Cabeus LCROSS site ≈ 37–38 K average | (paper) |
+
+## Candidate craters (gazetteer values: real)
+| Crater | Diameter (km) | Center lat, lon | Why it's interesting |
+|---|---|---|---|
+| Shackleton | 20.9 | −89.67, 129.78 | At the pole; rim gets near-constant sun; walls ~30° (too steep?) |
+| de Gerlache | 32.7 | −88.48, −88.34 | Artemis III candidate region on its rim |
+| Haworth | 51.4 | −87.45, −5.17 | Big shadowed floor (~1,019 km² PSR); Artemis III candidate region |
+| Shoemaker | 51.8 | −88.14, 45.91 | Largest PSR of the group (~1,080 km²) |
+| Faustini | 42.5 | −87.18, 84.31 | ~665 km² PSR |
+| Cabeus | 100.6 | −85.33, −42.13 | LCROSS impact site: water confirmed (5.6 %) |
+Depth and wall slope for each are measured from the LOLA map (to be filled in by `tools/build-craters.js`).
+
+## How crater data becomes game rules
+| Crater value | Physics | What the player feels |
+|---|---|---|
+| Wall slope (LOLA) | A rover can only climb/descend up to its max slope (game value, editable) | Edge warning shows the slope; too-steep walls are blocked; you must find the gentler route |
+| Depth (LOLA) | Climbing out costs E = m·g·h / η (g = 1.62 m/s², real) | Going down is cheap; coming back up eats the battery. Run out in the crater → stuck |
+| Diameter / PSR size | Distance to drive in total darkness | Longer drives in the dark drain more |
+| Floor temperature (Diviner where available, else estimate) | Heater power rises as it gets colder | Bigger heater draw on the floor |
+| Ice evidence (LCROSS for Cabeus; "unknown" elsewhere) | Science value of the crater | Higher-risk craters can pay off more |
+
+## New screens
+1. **Crater picker** (before loadout): map of the south pole with the six craters; each card shows real values with source tags (LOLA / Gazetteer / LCROSS)
+2. **Custom crater**: sliders/inputs for diameter, depth, wall slope, floor temperature, ice %; game builds a procedural bowl crater with those numbers
+3. **Predict**: runs the energy model for your loadout + crater without driving and shows a forecast (descent, science, climb-out, margin)
+4. **Drive** (3D, Three.js): WASD/arrows drive, E = run instruments at a site, H = headlights, C = camera (first-person / chase)
+5. Debrief: same verification table, now also: energy spent climbing, max slope reached, distance driven
+
+## Build order (cut line marked)
+1. Data pipeline: download LOLA files → `tools/build-craters.js` → `data/craters.json` (heightmap crops + measured depth/slope)
+2. Crater picker + custom crater + predict
+3. 3D terrain from heightmap, rover, WASD driving, slope + energy physics, edge warning
+4. Science sites, failure event, comms loss below the rim, debrief
+5. ——— cut line: everything above ships; below only if time ———
+6. Lighting by real sun angle, rover model detail, touch controls, sound
