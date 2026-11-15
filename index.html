@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lunar Mission Designer</title>
+  <meta name="description" content="Design a robotic rover mission to the lunar south pole, survive a power failure, and find out whether there is ice in the dark. NASA Space Apps 2026, team thegoatthox.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <div id="scene"></div>
+    <div id="hud-top" class="hud-top"></div>
+    <div class="reticle" aria-hidden="true"></div>
+    <div id="lumi" class="lumi">
+      <div class="lumi-eye" aria-hidden="true"></div>
+      <div>
+        <div id="lumi-name" class="lumi-name">LUMI</div>
+        <div id="lumi-text" class="lumi-text" aria-live="polite"></div>
+      </div>
+    </div>
+    <div id="panel" class="panel"></div>
+  </div>
+  <script src="config.js"></script>
+  <script src="game.js"></script>
+  <script src="scene2d.js"></script>
+  <script src="ui.js"></script>
+  <script>UI.start();</script>
+</body>
+</html>
