@@ -2,7 +2,7 @@
 
 **NASA Space Apps Challenge 2026 · Challenge: Space Mission Design Game · Team: thegoatthox**
 
-**▶ Play:** https://&lt;your-github-username&gt;.github.io/lunar-mission-designer/
+**▶ Play:** https://xuwangzitai.github.io/lunar-mission-designer/
 
 You plan and run a robotic rover mission to a permanently shadowed crater near the lunar south pole, seeing everything through the rover's camera. You pack instruments and backup gear within a 35 kg mass limit and run the mission on a fixed energy budget. Partway through, a battery cell fails. The mission report then checks each science requirement and traces every result back to a decision you made.
 
