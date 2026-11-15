@@ -1,50 +1,52 @@
-# Space Apps Project Page: Draft (v1)
+# Space Apps Project Page: Draft (v2)
 
 Review and edit this before anything is entered on the Space Apps site.
-**Save Progress** makes it visible to visitors. **Submit for Judging** is yours to press, after you finish v2 and the demo video.
+**Save Progress** makes it visible to visitors. **Submit for Judging** is yours to press, after the demo video.
 
 ---
 
 ## Project Name
 Lunar Mission Designer
 
-## High-Level Summary (≈150 words; form asks 50–200)
-Lunar Mission Designer is a browser game where players plan and run a robotic rover mission to a permanently shadowed crater near the lunar south pole, seeing everything through the rover's camera. Players pack scientific instruments and backup equipment within a 35 kg mass limit, then manage a fixed energy budget across four work shifts. The crater floor gets no sunlight, a battery cell fails at a random moment, and the rover loses contact with Earth once it drops below the crater rim. The central trade-off is whether to pack a backup battery or use that mass for another instrument. At the end, a mission report checks each science requirement and traces every success or failure back to the decision that caused it. The game turns abstract mission-design ideas (mass budgets, power, redundancy, communications, and requirements verification) into choices players feel. It encourages replaying with a different design to see how the outcome changes.
+## Summary (≈190 words; form suggests 50–200, max 1,500 characters)
+Lunar Mission Designer is a 3D browser game where players plan and drive a robotic rover mission into a real crater at the Moon's south pole to search for water ice. The terrain is built from NASA Lunar Reconnaissance Orbiter laser-altimeter (LOLA) data. Sunlight, permanent shadow and Earth radio contact are computed from the real shape of each crater. Players choose one of six real craters (Shackleton, de Gerlache, Faustini, Haworth, Shoemaker, Cabeus) or enter their own crater data. They pack instruments and backup equipment within a 35 kg mass limit and read an energy forecast. Then they drive with the keyboard: down a slope-safe route into permanent shadow, running science at each site, and back up into view of Earth so the data can be sent home. A battery failure strikes at a random moment. The central trade-off is whether to carry a backup battery or one more instrument. The backup is also the energy reserve for the climb out, which costs m·g·h. A mission report checks each requirement and shows where every watt-hour went. Players learn mission design by feeling the consequences of their own decisions.
 
 ## Project Details
-**How it works.** The game follows the stages of NASA's mission process: define the need and requirements, design, implement, then verify.
-1. *Briefing:* the science goal (is there water ice in the crater?) is stated as three requirements the game can check.
-2. *Loadout:* players choose from a neutron spectrometer, an IR spectrometer, a drill, a camera, a backup battery, and a repair kit, all within 35 kg. Orbital data only says the crater floor gets no direct sunlight, so players must reason about the energy they'll need there.
-3. *Mission:* four shifts (rim, rim, crater floor, rim). Each shift, players choose which instruments to power. Solar panels recharge the battery only in sunlight, and energy beyond battery capacity is wasted. A battery cell shorts at the start of shift 2 or 4. Players respond with whatever they packed: reroute through the backup, spend a shift repairing, or ration. In the crater, they can switch heaters off to save energy at the cost of freezing the rover for the next shift.
-4. *Debrief:* a verification table marks each requirement ✓ or ✗ and explains why, for example: *"On the crater floor you had 400 Wh: 200 went to heaters… the Drill needs 500 Wh. The battery failure cut storage to 400 Wh, and no backup battery was packed."*
+**How it works**
+1. *Choose a crater.* Six real south-pole craters. Each shows its diameter (USGS/IAU Gazetteer) and its depth, wall slope and drivable route (measured by our pipeline from NASA LOLA maps), plus floor temperature and ice evidence where NASA has data. A **custom crater** mode lets players type in diameter, depth, slope, temperature and ice to predict how a mission would go. Players also set the rover's maximum safe slope.
+2. *Pack the rover.* Neutron spectrometer, IR spectrometer, drill, camera, backup battery and repair kit, within 35 kg. A live **mission forecast** breaks down rolling, climbing (m·g·h ÷ η), heater and science energy along the route. It predicts the outcome with and without a battery failure.
+3. *Drive in 3D.* W/A/S/D or arrow keys (on-screen arrows on phones), headlights, and first-person or chase camera. LUMI, the rover, warns at the crater edge. Beacons follow a route found by A* pathfinding over the real terrain under the slope limit. Too-steep ground stops the rover. In permanent shadow there is no solar power and the heaters run. Below the rim, Earth is out of sight, so data waits until the rover climbs back into view.
+4. *Debrief.* A verification table marks each requirement ✓ or ✗ and explains why (for example, running out of power before the cold-trap data reached Earth). It also shows an energy breakdown and trip statistics.
 
-**Educational goal.** Players learn why mission teams trade science capability against margin and redundancy, and why there is rarely one perfect design. The same payload can succeed or fail depending on when things go wrong.
+**Real NASA data, validated.** Our build script crops each crater from LOLA's south-polar elevation and slope maps. For Shackleton it measures a depth of 4.09 km and mean walls of 31.2°, matching NASA's published 4.1 km and ~30.5° (Zuber et al. 2012). Running the Sun's ~1.5° maximum elevation over the real terrain puts every crater's floor in permanent shadow.
 
-**Design trade-offs.**
-- Max-science loadouts score highest when the failure comes late, but can miss the main objective when it comes early.
-- Backup-battery loadouts are reliable but carry less science.
-- We focused on mass and energy, the two resources most critical to a short surface mission. Budget, launch vehicle, and orbit are planned for future versions.
+**Educational goal and trade-offs.** Players learn that mission design means trading science against margin. In all six craters, a max-science rover gets stranded if its battery fails in the shadow, while a rover with a backup battery always makes it home. Shackleton's walls average 31°, but the pathfinder finds a 25 km switchback route, making it the hardest crater. Cabeus, the LCROSS impact site, is the only crater with confirmed water ice, which earns a science bonus.
 
-**Physics in play.** Energy = power × time (Wh); storage limits vs. generation; zero solar power in permanent shadow; heater power for thermal control; line-of-sight communications.
+**Physics in play.** Work against gravity (E = m·g·h ÷ η with lunar g = 1.62 m/s²), rolling resistance, slope limits, the low polar Sun and permanent shadow, heater power versus temperature, and radio line-of-sight.
 
-**Real vs. fictional.** All numbers (masses, Wh, points) are fictional values chosen for game balance and are kept in one config file. The concepts are real.
+**Real vs. fictional.** Terrain, depths, slopes, shadow, crater sizes, Cabeus ice and temperature are real data. Battery sizes, instrument energy, points, rover mass, speed and the other floor temperatures are game values, all kept in one config file.
 
-**Tools.** HTML, CSS and JavaScript with no frameworks, hosted on GitHub Pages. All graphics are drawn in code (SVG/CSS). Automated tests replay the designed playthroughs.
+**Tools.** HTML, CSS and JavaScript with Three.js for 3D, hosted on GitHub Pages. Node.js scripts process the NASA data and run automated tests that replay missions on every crater. A simpler 2D version (v1) is still playable at /v1/. Source: https://github.com/XuWangzitai/lunar-mission-designer
 
-**What's next (v2, in progress).** 3D keyboard driving, real NASA data for each crater, choosing which crater to explore, and entering your own crater data to predict outcomes.
+**Use of AI.** We used Claude (Anthropic), through the Claude Code desktop app, to read the challenge brief and resources, find NASA data sources, discuss game design, generate the game and data-processing code (HTML/CSS/JavaScript, Three.js, Node.js), write tests, and draft documentation, including this text. The team made the design decisions (robotic rover, first-person view, real crater data, crater picker and custom-crater prediction, keyboard driving, the rover's character voice), play-tested the game, and approved what was published. AI-generated code is acknowledged in the repository README and AI_LOG.md. No AI-generated images, video or audio are used, and no NASA logos or branding appear in the game.
 
 ## Project Demonstration
 *(To add: public link to a ≤30-second video)*
 
 ## Project
-- Play: https://xuwangzitai.github.io/lunar-mission-designer/
-- Source: https://github.com/XuWangzitai/lunar-mission-designer
+https://xuwangzitai.github.io/lunar-mission-designer/
 
-## NASA Data & Resources
-- Design and Develop Science Missions (NASA): https://www.nasa.gov/wp-content/uploads/2025/04/250323-design-and-develop-science-mission.pdf. Used to structure the game around NASA's mission process and to frame objectives as verifiable requirements checked in the debrief.
+## NASA Data (Link Text → URL)
+- LRO LOLA South-Polar Elevation and Slope Maps (ldem/ldsm_75s_240m), NASA PDS → https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/polar/img/
+- Zuber et al. 2012, Constraints on the volatile distribution within Shackleton crater (NASA NTRS) → https://ntrs.nasa.gov/api/citations/20120013758/downloads/20120013758.pdf
+- LCROSS mission (water ice at Cabeus) → https://science.nasa.gov/mission/lcross/
+- Design and Develop Science Missions (NASA) → https://www.nasa.gov/wp-content/uploads/2025/04/250323-design-and-develop-science-mission.pdf
 
-## Space Agency Partner & Other Data
-- None used in v1. No third-party code, images, audio, or fonts; all visuals are drawn in code.
+## Space Agency Partner & Other Data (Link Text → URL)
+- USGS/IAU Gazetteer of Planetary Nomenclature (crater names, centers, diameters) → https://planetarynames.wr.usgs.gov/
+- Paige et al. 2010, Diviner Lunar Radiometer Observations of Cold Traps (Cabeus temperature) → https://doi.org/10.1126/science.1187726
+- Three.js r160 (MIT license, 3D rendering) → https://threejs.org/
+- Claude (Anthropic), AI assistant used for code and text → https://www.anthropic.com/claude
 
-## Use of Super Intelligence (SI)
-We used Claude (Anthropic), through the Claude Code desktop app, to read the challenge brief and resources, discuss game design options, generate the game's code (HTML/CSS/JavaScript), write tests, and draft documentation, including this text. The team made all design decisions: robotic rover instead of crew, first-person camera view, hidden crater information, random failure timing, the rover's character voice, and what to publish. The team also play-tested the game. AI-generated code is acknowledged in the repository README and in AI_LOG.md. No AI-generated images, video, or audio are used, and no NASA logos or branding appear in the game.
+## AI-use checkboxes
+Ideation/Brainstorming · Research/Information Gathering · **Data Analysis and Interpretation** (new: the LOLA data pipeline) · Coding/Debugging · Writing/Editing
