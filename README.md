@@ -11,7 +11,7 @@ The central trade-off: **pack a backup battery, or use that mass for another sci
 
 ## How to play
 1. **Choose a crater**: Shackleton, de Gerlache, Faustini, Haworth, Shoemaker or Cabeus, each with real measurements. Or build a **custom crater** from your own numbers. You can also set the rover's maximum safe slope.
-2. **Pack the rover** and read the **mission forecast**: rolling, climbing, heater and science energy along the drivable route, with and without a battery failure.
+2. **Pack the rover** and read the **mission forecast**: rolling, climbing, heater and science energy along the drivable route, with and without a battery failure. Open **Rover engineering** to change the chassis mass, battery, solar array, motor efficiency and speed. The limits keep it buildable: batteries cost ~1 kg per 200 Wh and solar arrays ~1 kg per 75 W, so more energy always means more mass to haul up the crater wall.
 3. **Drive**: W/S or ↑/↓ to drive, A/D or ←/→ to steer, **E** to run science at a site, **H** for headlights, **C** to switch camera. On touch screens, use the on-screen arrows.
 4. Follow the beacons (a slope-safe path found over the real terrain). LUMI warns you at the crater edge. Too-steep ground stops the rover.
 5. The battery fails at a random moment: entering the shadow or during the first science run.

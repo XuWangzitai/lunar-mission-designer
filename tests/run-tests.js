@@ -52,5 +52,21 @@ check("cold-trap data waits for signal", Sim.evaluate(s2).met.R4 === false && s2
 Sim.tick(s2, 0.1, 0, 0, { lit: 1, shadow: false, signal: true, lights: false });
 check("data uplinks when Earth is in view", Sim.evaluate(s2).met.R4 === true);
 
+// Rover engineering: defaults reproduce the standard rover; limits can't be broken.
+const std = Sim.applyEngineering({});
+check("standard rover is 250 kg", std.baseMassKg === 250, `got ${std.baseMassKg}`);
+const silly = Sim.applyEngineering({ batteryWh: 1e9, solarW: -5, efficiency: 500, speedKmh: "fast", chassisKg: 1 });
+check("absurd values are clamped to the limits", CONFIG.mainBatteryWh === 8000 && CONFIG.solarPanelW === 100 && CONFIG.drivetrainEfficiency === 0.75 && CONFIG.speedKmh === 4 && silly.chassisKg === 150);
+check("a bigger battery adds mass (200 Wh/kg)", Math.abs(silly.batteryKg - 40) < 0.01);
+{
+  const T = Terrain.fromCrater(CRATERS[3]);
+  Sim.applyEngineering({ batteryWh: 2000 });
+  const small = Sim.predict(T, SAFE, { failure: "shadow" });
+  Sim.applyEngineering({ batteryWh: 8000 });
+  const big = Sim.predict(T, SAFE, { failure: "shadow" });
+  check("a heavier, bigger-battery rover spends more on climbing", big.used.climb > small.used.climb, `${Math.round(big.used.climb)} vs ${Math.round(small.used.climb)} Wh`);
+  Sim.applyEngineering(CONFIG.presets.standard);
+}
+
 console.log(fails ? `\n${fails} failure(s)` : "\nAll tests passed");
 process.exit(fails ? 1 : 0);

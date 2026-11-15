@@ -8,7 +8,24 @@ const CONFIG = {
   gMoon: 1.62,                 // m/s², REAL lunar surface gravity
   sunElevationDeg: 1.5,        // REAL: the Sun never rises more than ~1.5° above the horizon at the lunar poles
   earthElevationDeg: 4,        // Earth sits near the horizon from the south pole (game value within the real ±~7° libration)
-  roverBaseMassKg: 250,        // rover without payload
+  roverBaseMassKg: 250,        // rover without payload (recomputed from the engineering settings below)
+
+  // Rover engineering the player can change. Limits keep the rover buildable:
+  // energy storage and solar power both cost mass, and mass costs energy to climb.
+  specificEnergyWhPerKg: 200,  // REAL-ish: lithium-ion packs store ~150–250 Wh per kg
+  solarWPerKg: 75,             // REAL-ish: space solar arrays give ~50–150 W per kg
+  engineering: {
+    chassisKg:    { label: "Chassis and wheels", unit: "kg",   min: 150,  max: 400,  step: 5,    value: 226 },
+    batteryWh:    { label: "Main battery",       unit: "Wh",   min: 1000, max: 8000, step: 250,  value: 4000 },
+    solarW:       { label: "Solar array",        unit: "W",    min: 100,  max: 600,  step: 25,   value: 300 },
+    efficiency:   { label: "Motor efficiency",   unit: "%",    min: 30,   max: 75,   step: 5,    value: 50 },
+    speedKmh:     { label: "Cruise speed",       unit: "km/h", min: 1,    max: 6,    step: 0.5,  value: 4 },
+  },
+  presets: {
+    standard: { label: "Standard", chassisKg: 226, batteryWh: 4000, solarW: 300, efficiency: 50, speedKmh: 4 },
+    scout:    { label: "Light scout", chassisKg: 160, batteryWh: 2000, solarW: 200, efficiency: 55, speedKmh: 5 },
+    hauler:   { label: "Heavy hauler", chassisKg: 360, batteryWh: 7500, solarW: 550, efficiency: 45, speedKmh: 2.5 },
+  },
   rollingResistance: 0.08,     // fraction of weight needed to keep rolling on regolith
   drivetrainEfficiency: 0.5,   // wheel energy / battery energy
   maxSlopeDeg: 15,             // steepest slope the rover can safely drive (editable on the crater screen)

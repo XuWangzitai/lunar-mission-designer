@@ -20,6 +20,24 @@ const Sim = (() => {
     return meta.custom ? { floorTempK: meta.floorTempK, tempSource: "your input", iceFactor: meta.iceFactor, iceNote: "your input" } : EXTRA[meta.id];
   }
 
+  // Apply the player's rover design to the live settings, clamped to the allowed range.
+  // Battery and solar mass come from real-world specific energy / specific power.
+  function applyEngineering(values) {
+    const E = C.engineering, v = {};
+    for (const k of Object.keys(E)) {
+      const raw = Number(values[k] ?? E[k].value);
+      v[k] = Math.min(E[k].max, Math.max(E[k].min, Number.isFinite(raw) ? raw : E[k].value));
+      E[k].value = v[k];
+    }
+    const batteryKg = v.batteryWh / C.specificEnergyWhPerKg, solarKg = v.solarW / C.solarWPerKg;
+    C.mainBatteryWh = v.batteryWh;
+    C.solarPanelW = v.solarW;
+    C.drivetrainEfficiency = v.efficiency / 100;
+    C.speedKmh = v.speedKmh;
+    C.roverBaseMassKg = Math.round(v.chassisKg + batteryKg + solarKg);
+    return { ...v, batteryKg, solarKg, baseMassKg: C.roverBaseMassKg };
+  }
+
   function massKg(loadout) {
     return C.roverBaseMassKg + loadout.reduce((m, id) => m + item(id).mass, 0);
   }
@@ -196,7 +214,7 @@ const Sim = (() => {
     return { needed: Math.round(needed), solar: Math.round(s.solarWh), capacity: capacity(create(terrain, loadout)), used: s.used, shadowH, endStored: Math.round(s.stored), stuck: s.stuck, reachable: terrain.trapReachable, routeMaxSlope: terrain.meta.gentlestRoute.maxSlopeDeg, ...evaluate(s) };
   }
 
-  return { create, capacity, tick, runScience, respond, repairing, end, evaluate, predict, facts, massKg, item };
+  return { create, capacity, tick, runScience, respond, repairing, end, evaluate, predict, facts, massKg, item, applyEngineering };
 })();
 
 if (typeof module !== "undefined") module.exports = Sim;

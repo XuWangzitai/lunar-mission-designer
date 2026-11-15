@@ -63,7 +63,7 @@ const UI = (() => {
       <h1>Lunar Mission Designer</h1>
       <p class="lead">Pick a real crater at the Moon's south pole, pack your rover, and drive it into permanent shadow to look for ice. The terrain is real: it comes from NASA's Lunar Reconnaissance Orbiter laser altimeter.</p>
       <button class="btn primary" data-act="briefing">Start mission briefing</button>
-      <p class="fine">Physics and crater data are real where marked; power and science values are game values. Not affiliated with or endorsed by NASA. <a href="v1/">Play v1 (2D)</a></p>`, "center");
+      <p class="fine">Physics and crater data are real where marked; power and science values are game values. Not affiliated with or endorsed by NASA. <a href="v1/">Play v1 (2D)</a></p>`, "hero");
     say("Hi, I'm LUMI. Let's go find some ice.");
   }
 
@@ -165,6 +165,7 @@ const UI = (() => {
   function loadoutScreen() {
     if (craterChoice === "custom") terrain = getTerrain("custom");
     World.preview(terrain);
+    Sim.applyEngineering(Object.fromEntries(Object.entries(C.engineering).map(([k, e]) => [k, e.value])));
     const mass = loadout.reduce((m, id) => m + item(id).mass, 0);
     const p = Sim.predict(terrain, loadout), pf = Sim.predict(terrain, loadout, { failure: "shadow" });
     const r = reach(terrain);
@@ -184,6 +185,7 @@ const UI = (() => {
             <div class="card-stats">${stats}</div><div class="card-why">${it.why}</div></button>`;
         }).join("")}
       </div>
+      ${engineeringPanel()}
       <h3>Mission forecast</h3>
       <p class="muted small">Drive the beacon route, run each requirement's instruments, and come back to the landing site.</p>
       <div class="${r.ok ? "hint" : "alert soft"}">${r.text}.${r.ok ? "" : " The forecast skips the cold trap."}</div>
@@ -192,7 +194,7 @@ const UI = (() => {
       <div class="stat-row"><span><i class="dot climb"></i>Climbing (m·g·h ÷ η)</span><b>${fmt(u.climb)} Wh</b></div>
       <div class="stat-row"><span><i class="dot house"></i>Heaters, lights, systems (${p.shadowH.toFixed(1)} h in shadow)</span><b>${fmt(u.heaters + u.lights + u.systems)} Wh</b></div>
       <div class="stat-row"><span><i class="dot inst"></i>Science</span><b>${fmt(u.science)} Wh</b></div>
-      <div class="stat-row"><span>☀ Solar gained on the way</span><b>+${fmt(p.solar)} Wh</b></div>
+      <div class="stat-row"><span>Solar gained on the way</span><b>+${fmt(p.solar)} Wh</b></div>
       <div class="stat-row"><span>Battery</span><b>${fmt(p.capacity)} Wh</b></div>
       ${why("climb")}
       <div class="forecast">
@@ -201,6 +203,21 @@ const UI = (() => {
       </div>
       <div class="btn-row"><button class="btn" data-act="pick">Back</button><button class="btn primary" data-act="launch" ${loadout.length ? "" : "disabled"}>Land and drive</button></div>`);
     say(C.say.loadout);
+  }
+
+  // ---------- rover engineering ----------
+  let engOpen = false;
+  const engUnit = (k, v) => `${k === "batteryWh" ? fmt(v) : v} ${C.engineering[k].unit}`;
+  function engineeringPanel() {
+    const E = C.engineering, d = Sim.applyEngineering(Object.fromEntries(Object.keys(E).map((k) => [k, E[k].value])));
+    const derived = { batteryWh: `${d.batteryKg.toFixed(1)} kg of cells`, solarW: `${d.solarKg.toFixed(1)} kg of panels` };
+    return `<details class="eng" ${engOpen ? "open" : ""} data-act="engToggle">
+      <summary><span>Rover engineering</span><span class="eng-mass">Rover ${d.baseMassKg} kg + payload</span></summary>
+      <div class="presets">${Object.entries(C.presets).map(([id, p]) => `<button class="btn ghost" data-act="preset" data-id="${id}">${p.label}</button>`).join("")}</div>
+      ${Object.entries(E).map(([k, e]) => `<label class="slider eng-row"><span>${e.label}${derived[k] ? ` <i>= ${derived[k]}</i>` : ""}</span><b>${engUnit(k, e.value)}</b>
+        <input type="range" min="${e.min}" max="${e.max}" step="${e.step}" value="${e.value}" data-act="eng" data-id="${k}"></label>`).join("")}
+      <p class="fine">Limits keep the rover buildable. Batteries store about ${C.specificEnergyWhPerKg} Wh per kg and solar arrays give about ${C.solarWPerKg} W per kg, so extra energy always adds mass, and mass costs energy on every climb.</p>
+    </details>`;
   }
 
   function toggle(id) {
@@ -235,7 +252,7 @@ const UI = (() => {
       shadow: () => { say(C.say.shadow); explain("shadow"); },
       signalLost: () => { say(C.say.signalLost); explain("signal"); },
       signalBack: () => say(C.say.signalBack),
-      uplink: () => toast("📡 Data uplinked to Earth"),
+      uplink: () => toast("Data uplinked to Earth"),
       near: () => { if (data) { say(C.say.site); toast(`${data.label}: press E`); } },
       site: () => openSite(data),
       failure: () => openFailure(),
@@ -301,14 +318,14 @@ const UI = (() => {
     else { tag.textContent = "DRAINING"; tag.className = "flow drain"; }
     $("#h-slope").textContent = `${Math.abs(h.slope).toFixed(0)}°`;
     $("#h-slope").className = Math.abs(h.slope) > C.maxSlopeDeg * 0.8 ? "bad" : "";
-    $("#h-signal").textContent = h.signal ? "EARTH ▮▮▮" : "NO SIGNAL";
+    $("#h-signal").textContent = h.signal ? "EARTH LINK" : "NO SIGNAL";
     $("#h-signal").className = h.signal ? "" : "bad";
     $("#h-shadow").hidden = !h.shadow;
     $("#h-lights").textContent = h.lights ? "ON" : "OFF";
     $("#h-time").textContent = `${sim.timeH.toFixed(1)} h · ${sim.distanceKm.toFixed(1)} km`;
     const ev = Sim.evaluate(sim);
-    $("#h-reqs").innerHTML = C.requirements.map((r) => `<li class="${ev.met[r.id] ? "ok" : ""}">${ev.met[r.id] ? "✓" : "○"} ${r.id} ${r.title}</li>`).join("")
-      + (sim.pending.length ? `<li class="bad">⏳ ${sim.pending.length} result(s) waiting for signal</li>` : "");
+    $("#h-reqs").innerHTML = C.requirements.map((r) => `<li class="${ev.met[r.id] ? "ok" : ""}">${ev.met[r.id] ? "■" : "□"} ${r.id} ${r.title}</li>`).join("")
+      + (sim.pending.length ? `<li class="bad">${sim.pending.length} result(s) waiting for signal</li>` : "");
     $("#h-score").textContent = ev.score;
     drawRover(h);
   }
@@ -358,7 +375,7 @@ const UI = (() => {
     setTimeout(() => document.body.classList.remove("alarm"), 1600);
     const opts = [`<button class="btn primary" data-act="respond" data-id="ration">${sim.backupCap ? "Route power through the backup" : "Ration power and carry on"}</button>`];
     if (loadout.includes("kit")) opts.push(`<button class="btn" data-act="respond" data-id="repair">Repair: ${C.repair.hours} hours, main pack back to ${fmt(C.mainBatteryWh * C.repair.mainFraction)} Wh</button>`);
-    setPanel(`<div class="alert"><div class="eyebrow">⚠ BATTERY CELL FAULT</div>
+    setPanel(`<div class="alert"><div class="eyebrow">Battery cell fault</div>
       <h2>Main pack: ${fmt(C.mainBatteryWh)} → ${fmt(sim.mainCap)} Wh</h2>
       <p>Battery now ${fmt(sim.stored)} / ${fmt(Sim.capacity(sim))} Wh. Remember the climb back out.</p>${opts.join("")}</div>`);
     say(C.say.failure, { cap: fmt(sim.mainCap) });
@@ -389,14 +406,14 @@ const UI = (() => {
       <div class="eyebrow">MISSION REPORT · ${terrain.meta.name.toUpperCase()}</div>
       <h1 class="tier tier-${r.tier}">${t.label}</h1>
       <p class="lead">${sim.stuck ? "LUMI ran out of power in the crater. " : ""}${t.line}</p>
-      <div class="scoreline"><span>Science returned <b>${r.score}</b></span>${r.lostPoints ? `<span class="bad">Never reached Earth: ${r.lostPoints}</span>` : ""}</div>
+      <div class="scoreline"><span>Science returned<b>${r.score}</b></span>${r.lostPoints ? `<span class="bad">Never reached Earth: ${r.lostPoints}</span>` : ""}</div>
       <h3>Requirements check</h3>
-      <div class="verify">${C.requirements.map((q) => `<div class="v ${r.met[q.id] ? "ok" : "no"}"><span class="mark">${r.met[q.id] ? "✓" : "✗"}</span>
+      <div class="verify">${C.requirements.map((q) => `<div class="v ${r.met[q.id] ? "ok" : "no"}"><span class="mark">${r.met[q.id] ? "PASS" : "FAIL"}</span>
         <div><b>${q.id} ${q.title}</b><br><span class="muted">${r.why[q.id]}</span></div></div>`).join("")}</div>
       <h3>Where the energy went</h3>
       ${row("Rolling", u.drive, "drive")}${row("Climbing", u.climb, "climb")}${row("Heaters", u.heaters, "heat")}${row("Headlights", u.lights, "house")}${row("Systems", u.systems, "house")}${row("Science", u.science, "inst")}
-      <div class="stat-row"><span>☀ Solar collected</span><b>+${fmt(sim.solarWh)} Wh</b></div>
-      ${sim.wastedWh > 1 ? `<div class="stat-row warnline"><span>☀ Sunlight wasted (battery already full)</span><b>${fmt(sim.wastedWh)} Wh</b></div>` : ""}
+      <div class="stat-row"><span>Solar collected</span><b>+${fmt(sim.solarWh)} Wh</b></div>
+      ${sim.wastedWh > 1 ? `<div class="stat-row warnline"><span>Sunlight wasted (battery already full)</span><b>${fmt(sim.wastedWh)} Wh</b></div>` : ""}
       <h3>Trip</h3>
       <ul class="events">
         <li>Packed ${loadout.map((id) => item(id).short).join(", ")} (${Sim.massKg(loadout)} kg rover)</li>
@@ -504,6 +521,7 @@ const UI = (() => {
       const id = t.dataset.id;
       ({
         briefing,
+        preset: () => { engOpen = true; Sim.applyEngineering(C.presets[id]); loadoutScreen(); },
         pick: () => { $("#loading").hidden = false; setTimeout(() => { pick(craterChoice === "custom" ? "custom" : craterChoice && craterChoice.id); $("#loading").hidden = true; }, 30); },
         crater: () => selectCrater(id),
         toLoadout: loadoutScreen, toggle: () => toggle(id), launch,
@@ -514,6 +532,7 @@ const UI = (() => {
     panel.addEventListener("input", (e) => {
       const t = e.target;
       if (t.dataset.act === "maxslope") { C.maxSlopeDeg = +t.value; $("#maxslope-v").textContent = `${t.value}°`; }
+      if (t.dataset.act === "eng") { t.previousElementSibling.textContent = engUnit(t.dataset.id, +t.value); }
       if (t.dataset.act === "custom") { customParams[t.dataset.id] = +t.value; t.previousElementSibling.textContent = `${t.value} ${{ diameterKm: "km", depthKm: "km", wallSlopeDeg: "°", floorTempK: "K", icePct: "%" }[t.dataset.id]}`; }
     });
     panel.addEventListener("change", (e) => {
@@ -529,7 +548,15 @@ const UI = (() => {
         }, 30);
       }
       if (t.dataset.act === "custom") selectCrater("custom");
+      if (t.dataset.act === "eng") {
+        engOpen = true;
+        C.engineering[t.dataset.id].value = +t.value;
+        const y = $("#panel").scrollTop;
+        loadoutScreen();
+        $("#panel").scrollTop = y;
+      }
     });
+    panel.addEventListener("toggle", (e) => { if (e.target.matches && e.target.matches("details.eng")) engOpen = e.target.open; }, true);
     $("#btn-end").addEventListener("click", endMission);
     $("#btn-map").addEventListener("click", openMap);
     $("#minimap").addEventListener("click", openMap);
