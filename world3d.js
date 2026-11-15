@@ -330,4 +330,7 @@ function setTouch(name, down) { keys[name] = down; }
 // Test hook: point the rover (used by automated play-throughs).
 function aim(x, y) { state.heading = Math.atan2(x - state.x, y - state.y); }
 
-window.World = { init, load, preview, start, stop, setPaused, position, setTouch, aim, terrain: () => terrain, toggleLights: () => { state.lights = !state.lights; emit("lights", state.lights); }, toggleCamera: () => { camMode = camMode === "chase" ? "first" : "chase"; }, nearSite: () => state.near };
+// Demo recording renders at a lower resolution so screen capture stays smooth.
+function setPixelRatio(r) { renderer.setPixelRatio(r); resize(); }
+
+window.World = { init, load, preview, start, stop, setPaused, position, setTouch, aim, setPixelRatio, terrain: () => terrain, toggleLights: () => { state.lights = !state.lights; emit("lights", state.lights); }, toggleCamera: () => { camMode = camMode === "chase" ? "first" : "chase"; }, nearSite: () => state.near };

@@ -7,7 +7,7 @@ const C = CONFIG;
 C.demo = true;
 C.forceFailure = "shadow";
 
-const SPEED = 7;              // time-lapse while driving
+const SPEED = 5;              // time-lapse while driving
 const CRATER = "faustini";    // shortest route of the six
 const $ = (s) => document.querySelector(s);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -59,9 +59,9 @@ async function answerFault() {
   const b = $("#panel:not([hidden]) [data-act=respond]");
   if (!b) return false;
   caption("Then something breaks: the main battery fails");
-  await wait(1800);
+  await wait(1600);
   b.click();
-  await wait(400);
+  await wait(300);
   return true;
 }
 
@@ -92,12 +92,13 @@ async function runAt(ids, hold = 1800) {
 
 async function play() {
   await until(() => $("[data-act=briefing]"));
+  World.setPixelRatio(1);
   await wait(400);
   mark("start");
 
   // 1. Title over the real Shackleton terrain.
   caption("Real lunar craters, built from NASA LRO laser-altimeter data");
-  await wait(2600);
+  await wait(2200);
 
   // 2. Crater picker.
   await click("[data-act=briefing]");
@@ -106,9 +107,9 @@ async function play() {
   caption("Six real south-pole craters, measured from LOLA");
   const panel = $("#panel");
   panel.scrollTo({ top: panel.scrollHeight * 0.35, behavior: "smooth" });
-  await wait(1000);
+  await wait(800);
   await click(`[data-act=crater][data-id=${CRATER}]`);
-  await wait(1100);
+  await wait(900);
 
   // 3. The decision: backup battery or one more instrument.
   await click("[data-act=toLoadout]");
@@ -120,13 +121,13 @@ async function play() {
   await click("[data-act=toggle][data-id=ir]");
   await wait(200);
   showForecast();
-  await wait(1500);
+  await wait(1300);
   await click("[data-act=toggle][data-id=ir]");
   await wait(150);
   await click("[data-act=toggle][data-id=backup]");
   await wait(200);
   showForecast();
-  await wait(1300);
+  await wait(1100);
 
   // 4. Drive down into permanent shadow (time-lapse).
   C.timeScale *= SPEED;
@@ -138,7 +139,7 @@ async function play() {
   const path = T.path, mid = Math.floor(path.length / 2);
   for (const q of path.slice(1, mid + 1)) await driveTo(q.x, q.y);
   lapse.hidden = true;
-  await runAt(["neutron"], 700);
+  await runAt(["neutron"], 500);
 
   lapse.hidden = false;
   caption("The backup battery keeps us going");
@@ -147,7 +148,7 @@ async function play() {
 
   // 5. Drill the cold trap.
   caption("Drill the cold trap");
-  await runAt(["neutron", "drill"], 1800);
+  await runAt(["neutron", "drill"], 1400);
 
   // 6. Climb back into view of Earth (climbing costs m·g·h).
   caption("Climb out until Earth is in view to send the data home");
@@ -163,7 +164,7 @@ async function play() {
   await click("#btn-end");
   await until(() => $(".tier"), 6000);
   caption("Every result traced back to the decisions that caused it");
-  await wait(2700);
+  await wait(1800);
 
   // 8. End card.
   caption("");
@@ -175,7 +176,7 @@ async function play() {
   document.body.appendChild(end);
   requestAnimationFrame(() => end.classList.add("on"));
   mark("end card");
-  await wait(2400);
+  await wait(2000);
   mark("done");
   window.__demo.done = true;
 }
