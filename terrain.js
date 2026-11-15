@@ -55,10 +55,11 @@ const Terrain = (() => {
     return (T.h[k] * (1 - u) + T.h[k + 1] * u) * (1 - v) + (T.h[k + T.n] * (1 - u) + T.h[k + T.n + 1] * u) * v;
   }
 
-  // Slope (degrees, + uphill) along a direction, over one grid cell.
+  // Slope (degrees, + uphill) of the ground ahead, over one grid cell — the same baseline the
+  // route planner uses, so a beacon route is always drivable.
   function slopeAlong(T, x, y, dx, dy) {
     const L = T.cell;
-    const dh = heightAt(T, x + dx * L * 0.5, y + dy * L * 0.5) - heightAt(T, x - dx * L * 0.5, y - dy * L * 0.5);
+    const dh = heightAt(T, x + dx * L, y + dy * L) - heightAt(T, x, y);
     return Math.atan2(dh, L) / deg;
   }
 
@@ -101,35 +102,92 @@ const Terrain = (() => {
       for (const da of [0, 10, -10, 20, -20, 30, -30, 45, -45]) {
         const a0 = Math.atan2(T.routeDir.y, T.routeDir.x) + da * deg;
         const p = { x: Math.cos(a0) * R * rf, y: Math.sin(a0) * R * rf };
-        if (Math.abs(p.x) < T.half && Math.abs(p.y) < T.half && signalAt(T, p.x, p.y) && maxSlope(T, p.x, p.y) < 8) { start = p; break; }
+        if (Math.abs(p.x) < T.half && Math.abs(p.y) < T.half && signalAt(T, p.x, p.y) && litAt(T, p.x, p.y) >= 0.5 && maxSlope(T, p.x, p.y) < 8) { start = p; break; }
       }
       if (start) break;
     }
     start = start || { x: T.routeDir.x * R * 1.12, y: T.routeDir.y * R * 1.12 };
     T.start = { ...start, heading: Math.atan2(-T.routeDir.x, -T.routeDir.y) };
-    // Cold trap = first permanently shadowed ground well down the route toward the floor.
-    let trap = { x: T.floor.x, y: T.floor.y };
-    const L = Math.hypot(T.floor.x - start.x, T.floor.y - start.y);
-    for (let d = 0; d < L; d += T.cell / 2) {
-      const x = start.x + ((T.floor.x - start.x) * d) / L, y = start.y + ((T.floor.y - start.y) * d) / L;
-      if (litAt(T, x, y) === 0 && heightAt(T, x, y) < -0.5 * depth) {
-        const k = Math.min(L, d + 1500);
-        trap = { x: start.x + ((T.floor.x - start.x) * k) / L, y: start.y + ((T.floor.y - start.y) * k) / L };
+    // Safest drivable path from the landing site toward the floor (A* on the real grid).
+    const route = findPath(T, start, T.floor, C.maxSlopeDeg);
+    T.routeReachesFloor = route.reached;
+    let path = route.path;
+    // Cold trap = first permanently shadowed ground well down that path (+~1.5 km inside).
+    let trapIdx = path.length - 1, walked = 0;
+    for (let k = 1; k < path.length; k++) {
+      walked += Math.hypot(path[k].x - path[k - 1].x, path[k].y - path[k - 1].y);
+      if (litAt(T, path[k].x, path[k].y) === 0 && heightAt(T, path[k].x, path[k].y) < -0.5 * depth) {
+        trapIdx = Math.min(path.length - 1, k + Math.ceil(1500 / T.cell));
         break;
       }
     }
-    const side = { x: -T.routeDir.y, y: T.routeDir.x };
+    path = path.slice(0, trapIdx + 1);
+    const trapOk = route.reached || litAt(T, path[trapIdx].x, path[trapIdx].y) === 0;
+    // If the rover can't get into the shadow, the cold trap still exists; it's just out of reach.
+    const trap = trapOk ? path[trapIdx] : { x: T.floor.x, y: T.floor.y };
+    T.trapReachable = trapOk;
+    T.path = path;
+    const wall = path[Math.floor(path.length / 2)] || start;
+    // Rim site: sunlit, in view of Earth, flat, a few km from the landing spot, drivable.
+    let rimSite = null;
+    const a0 = Math.atan2(start.y, start.x), r0 = Math.hypot(start.x, start.y);
+    for (const da of [12, -12, 20, -20, 30, -30, 45, -45]) {
+      for (const rr of [1, 1.08, 0.95]) {
+        const p = { x: Math.cos(a0 + da * deg) * r0 * rr, y: Math.sin(a0 + da * deg) * r0 * rr };
+        if (Math.abs(p.x) > T.half * 0.95 || Math.abs(p.y) > T.half * 0.95) continue;
+        if (litAt(T, p.x, p.y) >= 0.5 && signalAt(T, p.x, p.y) && maxSlope(T, p.x, p.y) < 10 && findPath(T, start, p, C.maxSlopeDeg).reached) { rimSite = p; break; }
+      }
+      if (rimSite) break;
+    }
+    rimSite = rimSite || { x: start.x, y: start.y };
     T.sites = [
-      { id: "rim", label: "Rim survey site", kind: "rim", x: start.x + side.x * R * 0.25, y: start.y + side.y * R * 0.25 },
-      { id: "wall", label: "Crater wall site", kind: "wall", x: (start.x + trap.x) / 2, y: (start.y + trap.y) / 2 },
+      { id: "rim", label: "Rim survey site", kind: "rim", x: rimSite.x, y: rimSite.y },
+      { id: "wall", label: "Crater wall site", kind: "wall", x: wall.x, y: wall.y },
       { id: "floor", label: "Cold trap", kind: "floor", x: trap.x, y: trap.y },
     ];
     T.sites.forEach((s) => { s.z = heightAt(T, s.x, s.y); });
-    // Beacon line: start → wall site → cold trap.
-    T.beacons = [];
-    const legs = [[T.start, T.sites[1]], [T.sites[1], T.sites[2]]];
-    for (const [a, b] of legs) for (let k = 0; k < 1; k += 0.05) T.beacons.push({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
+    // Beacons every ~2 grid cells along the drivable path.
+    T.beacons = path.filter((_, k) => k % 2 === 0);
     return T;
+  }
+
+  // A* over the height grid, only along steps the rover can drive (with a 20 % safety margin,
+  // since the ground between grid points can be a little steeper).
+  // Returns {path: [{x,y}], reached: bool}; if the target can't be reached, the path ends at
+  // the closest reachable point.
+  function findPath(T, from, to, maxDeg) {
+    const n = T.n, tanMax = Math.tan(maxDeg * 0.8 * deg);
+    const ix = (x, y) => [Math.max(0, Math.min(n - 1, Math.round((x + T.half) / T.cell))), Math.max(0, Math.min(n - 1, Math.round((y + T.half) / T.cell)))];
+    const [si, sj] = ix(from.x, from.y), [ti, tj] = ix(to.x, to.y);
+    const start = sj * n + si, goal = tj * n + ti;
+    const g = new Float64Array(n * n).fill(Infinity), came = new Int32Array(n * n).fill(-1), closed = new Uint8Array(n * n);
+    const est = (k) => Math.hypot((k % n) - ti, Math.floor(k / n) - tj) * T.cell;
+    const heap = [];
+    const push = (k, f) => { heap.push([f, k]); let c = heap.length - 1; while (c > 0) { const p = (c - 1) >> 1; if (heap[p][0] <= heap[c][0]) break; [heap[p], heap[c]] = [heap[c], heap[p]]; c = p; } };
+    const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let c = 0; for (;;) { const l = 2 * c + 1, r = l + 1; let m = c; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === c) break; [heap[m], heap[c]] = [heap[c], heap[m]]; c = m; } } return top[1]; };
+    g[start] = 0; push(start, est(start));
+    let best = start;
+    while (heap.length) {
+      const k = pop();
+      if (closed[k]) continue;
+      closed[k] = 1;
+      if (est(k) < est(best)) best = k;
+      if (k === goal) break;
+      const i = k % n, j = Math.floor(k / n);
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        if (!di && !dj) continue;
+        const i2 = i + di, j2 = j + dj;
+        if (i2 < 1 || j2 < 1 || i2 >= n - 1 || j2 >= n - 1) continue;
+        const k2 = j2 * n + i2, d = T.cell * (di && dj ? Math.SQRT2 : 1);
+        if (Math.abs(T.h[k2] - T.h[k]) / d > tanMax) continue;
+        const ng = g[k] + d;
+        if (ng < g[k2]) { g[k2] = ng; came[k2] = k; push(k2, ng + est(k2)); }
+      }
+    }
+    const end = closed[goal] ? goal : best, path = [];
+    for (let k = end; k !== -1; k = came[k]) path.push({ x: -T.half + (k % n) * T.cell, y: -T.half + Math.floor(k / n) * T.cell });
+    path.reverse();
+    return { path, reached: end === goal };
   }
 
   function mapAt(T, arr, x, y) {

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lunar Mission Designer</title>
+  <meta name="description" content="Drive a rover into real lunar south-pole craters built from NASA LRO laser-altimeter data. NASA Space Apps 2026, team thegoatthox.">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
+</head>
+<body>
+  <div id="app">
+    <div id="world"></div>
+
+    <div id="hud" class="hud" hidden>
+      <div class="hud-top">
+        <span id="h-batt-wrap" class="battery">BATTERY <b id="h-batt"></b><span class="gauge"><span id="h-batt-bar" class="fill"></span></span></span>
+        <span class="hud-item">SUN <b id="h-sun"></b></span>
+        <span class="hud-item">SLOPE <b id="h-slope"></b></span>
+        <span class="hud-item"><b id="h-signal"></b></span>
+        <span class="hud-item">LIGHTS <b id="h-lights"></b></span>
+        <span class="hud-item"><b id="h-time"></b></span>
+        <span id="h-shadow" class="hud-item shadow-tag" hidden>PERMANENT SHADOW</span>
+      </div>
+      <div class="hud-right">
+        <canvas id="minimap" width="180" height="180"></canvas>
+        <div class="reqbox"><div class="eyebrow">MISSION · SCIENCE <b id="h-score">0</b></div><ul id="h-reqs"></ul></div>
+        <div class="hud-btns">
+          <button id="btn-site" class="btn small">E · Science</button>
+          <button id="btn-lights" class="btn small">H · Lights</button>
+          <button id="btn-cam" class="btn small">C · Camera</button>
+          <button id="btn-end" class="btn small">End mission</button>
+        </div>
+        <div class="keys">W/S or ↑/↓ drive · A/D or ←/→ steer</div>
+      </div>
+      <div class="touchpad">
+        <button data-touch="touchUp">▲</button>
+        <div><button data-touch="touchLeft">◀</button><button data-touch="touchDown">▼</button><button data-touch="touchRight">▶</button></div>
+      </div>
+    </div>
+
+    <div id="lumi" class="lumi">
+      <div class="lumi-eye" aria-hidden="true"></div>
+      <div><div id="lumi-name" class="lumi-name">LUMI</div><div id="lumi-text" class="lumi-text" aria-live="polite"></div></div>
+    </div>
+    <div id="panel" class="panel"></div>
+    <div id="toast" class="toast" hidden></div>
+    <div id="loading" class="loading" hidden>Computing sunlight and Earth visibility from the terrain…</div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="data/craters.js"></script>
+  <script src="terrain.js"></script>
+  <script src="sim.js"></script>
+  <script src="ui.js"></script>
+  <script type="module">
+    import "./world3d.js";
+    UI.start();
+  </script>
+</body>
+</html>

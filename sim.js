@@ -150,7 +150,13 @@ const Sim = (() => {
   function predict(terrain, loadout, opts = {}) {
     const s = create(terrain, loadout, { failureTrigger: opts.failure || "none" });
     const respondIfNeeded = () => { if (s.failurePending) respond(s, "ration"); };
-    const pts = [terrain.start, terrain.sites[0], terrain.start, terrain.sites[1], terrain.sites[2], terrain.sites[1], terrain.start];
+    // Waypoints: rim site and back, then down the drivable path and back up it.
+    const [rim, wall, trap] = terrain.sites;
+    const path = terrain.path.length ? terrain.path : [terrain.start];
+    const mid = Math.floor(path.length / 2);
+    const pts = [terrain.start, rim, terrain.start, ...path.slice(1), ...path.slice(0, -1).reverse()];
+    const scienceAt = { 1: 0, [2 + mid]: 1 };
+    if (terrain.trapReachable) scienceAt[1 + path.length] = 2;
     const stepM = 100;
     let shadowH = 0;
     const kmh = C.speedKmh;
@@ -167,16 +173,17 @@ const Sim = (() => {
         respondIfNeeded();
       }
       // The plan that meets every requirement: Neutron on the rim and wall, ice instruments in the trap.
-      const plan = { 0: ["neutron", "camera"], 3: ["neutron"], 4: ["ir", "drill"] }[k];
+      const siteIdx = scienceAt[k + 1];
+      const plan = siteIdx == null ? null : [["neutron", "camera"], ["neutron"], ["ir", "drill"]][siteIdx];
       if (plan && !s.done) {
-        const site = k === 0 ? terrain.sites[0] : k === 3 ? terrain.sites[1] : terrain.sites[2];
+        const site = [rim, wall, trap][siteIdx];
         const ids = plan.filter((id) => loadout.includes(id));
         if (ids.length) runScience(s, site, ids);
         respondIfNeeded();
       }
     }
     const needed = Object.values(s.used).reduce((a, b) => a + b, 0);
-    return { needed: Math.round(needed), solar: Math.round(s.solarWh), capacity: capacity(create(terrain, loadout)), used: s.used, shadowH, endStored: Math.round(s.stored), stuck: s.stuck, routeMaxSlope: terrain.meta.gentlestRoute.maxSlopeDeg, ...evaluate(s) };
+    return { needed: Math.round(needed), solar: Math.round(s.solarWh), capacity: capacity(create(terrain, loadout)), used: s.used, shadowH, endStored: Math.round(s.stored), stuck: s.stuck, reachable: terrain.trapReachable, routeMaxSlope: terrain.meta.gentlestRoute.maxSlopeDeg, ...evaluate(s) };
   }
 
   return { create, capacity, tick, runScience, respond, repairing, end, evaluate, predict, facts, massKg, item };

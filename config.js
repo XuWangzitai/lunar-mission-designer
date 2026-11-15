@@ -68,6 +68,7 @@ const CONFIG = {
     edge: "Crater edge ahead. Slope here is {slope}°. I can handle {max}°. The beacons mark the gentlest way down.",
     tooSteepUp: "Too steep to climb: {slope}°. Find a gentler line.",
     tooSteepDown: "I'm not going down {slope}°. I'd tumble. Try along the beacons.",
+    creep: "{slope}° here. That's past my comfort zone. Creeping.",
     shadow: "We just crossed into permanent shadow. No sunlight has touched this ground in a very long time.",
     signalLost: "Earth just dropped behind the crater wall. I'm on my own until we climb back up.",
     signalBack: "Earth is back in view. Uploading everything we've got.",

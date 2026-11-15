@@ -11,4 +11,7 @@ Tool: **Claude (Anthropic), Claude Code desktop app**. All generated code is ack
 | 2026-11-14 | Generated the game code: config.js, game.js, scene2d.js, ui.js, index.html, style.css, tests/run-tests.js, tools/serve.js | Reviewed and play-tested |
 | 2026-11-14 | Wrote README.md and set up the GitHub repository and GitHub Pages | Played v1, approved it for publishing, planned v2 (3D driving, real NASA crater data, custom crater input) |
 
+| 2026-11-14 | Found NASA data sources (LRO LOLA polar maps on PDS, USGS/IAU Gazetteer, Zuber 2012 on NTRS, LCROSS, Diviner); wrote tools/build-craters.js to turn LOLA maps into crater terrain and validated it against NASA's published Shackleton depth and slope | Asked for real NASA crater data, a crater picker and custom-crater predictions; approved downloading the LOLA files |
+| 2026-11-14 | Generated v2 code: terrain.js (shadow, Earth line-of-sight, A* safe route), sim.js (energy physics), world3d.js (Three.js driving), ui.js, tests | Requested 3D, keyboard driving, edge warning, live HUD; chose character voice; play-tested |
+
 No AI-generated images, video, or audio are used. All visuals are drawn in code (SVG/CSS).

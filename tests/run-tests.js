@@ -22,9 +22,15 @@ for (const c of CRATERS) {
   const fmt = (p) => `${p.needed}/${p.capacity}Wh→${p.stuck ? "STUCK" : p.tier}`;
   const a = Sim.predict(T, FULL), af = Sim.predict(T, FULL, { failure: "shadow" });
   const b = Sim.predict(T, SAFE), bf = Sim.predict(T, SAFE, { failure: "shadow" });
-  const trapKm = (Math.hypot(T.sites[2].x - T.start.x, T.sites[2].y - T.start.y) / 1000).toFixed(1);
-  console.log(`  ${c.name.padEnd(11)} route ${String(c.gentlestRoute.maxSlopeDeg).padStart(4)}° trap ${trapKm} km, ${(-T.sites[2].z).toFixed(0)} m down, shadow ${a.shadowH.toFixed(1)} h | MAX ${fmt(a)} fail:${fmt(af)} | SAFE ${fmt(b)} fail:${fmt(bf)}`);
+  let pathKm = 0, steepest = 0;
+  for (let k = 1; k < T.path.length; k++) {
+    const d = Math.hypot(T.path[k].x - T.path[k - 1].x, T.path[k].y - T.path[k - 1].y);
+    pathKm += d / 1000;
+    steepest = Math.max(steepest, Math.atan2(Math.abs(Terrain.heightAt(T, T.path[k].x, T.path[k].y) - Terrain.heightAt(T, T.path[k - 1].x, T.path[k - 1].y)), d) * 180 / Math.PI);
+  }
+  console.log(`  ${c.name.padEnd(11)} ${T.trapReachable ? "REACHABLE  " : "UNREACHABLE"} path ${pathKm.toFixed(1)} km, steepest step ${steepest.toFixed(1)}°, trap ${(-T.sites[2].z).toFixed(0)} m down, shadow ${a.shadowH.toFixed(1)} h | MAX ${fmt(a)} fail:${fmt(af)} | SAFE ${fmt(b)} fail:${fmt(bf)}`);
   check(`${c.name}: cold trap is in permanent shadow`, floorLit === 0);
+  check(`${c.name}: beacon path never exceeds the rover's slope limit`, steepest <= CONFIG.maxSlopeDeg + 0.01);
 }
 
 // Physics sanity: climbing 1 km costs m·g·h/η.
