@@ -70,6 +70,7 @@ const Sim = (() => {
   function tick(s, dtH, dist, climb, env) {
     if (s.done || s.failurePending) return [];
     const events = [];
+    const usedBefore = Object.values(s.used).reduce((a, b) => a + b, 0);
     s.timeH += dtH;
     s.distanceKm += dist / 1000;
     s.maxSlopeSeen = Math.max(s.maxSlopeSeen, Math.abs(env.slopeDeg || 0));
@@ -86,7 +87,16 @@ const Sim = (() => {
     const solar = C.solarPanelW * env.lit * dtH;
     const room = capacity(s) - s.stored;
     s.solarWh += Math.min(room, solar);
+    s.wastedWh = (s.wastedWh || 0) + Math.max(0, solar - room);
     s.stored = Math.min(capacity(s), s.stored + solar);
+
+    // Live power flow for the HUD (watts = watt-hours per hour).
+    if (dtH > 0) {
+      const outW = (Object.values(s.used).reduce((a, b) => a + b, 0) - usedBefore) / dtH;
+      const inW = C.solarPanelW * env.lit;
+      const smooth = (old, v) => (old == null ? v : old + (v - old) * 0.15);
+      s.flow = { inW, outW: smooth(s.flow && s.flow.outW, outW), full: s.stored >= capacity(s) - 0.5 };
+    }
 
     if (env.shadow && !s.everShadow) { s.everShadow = true; events.push("shadow"); if (s.failureTrigger === "shadow") { fail(s); events.push("failure"); } }
     if (env.shadow !== s.inShadow) s.inShadow = env.shadow;

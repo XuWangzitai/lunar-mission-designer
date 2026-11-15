@@ -244,3 +244,29 @@ p { line-height: 1.5; margin: 0 0 12px; }
   .hud-top { font-size: 10px; }
   .touchpad { bottom: 120px; }
 }
+
+/* power flow + big map */
+.flow { font-size: 11px; padding: 1px 6px; border-radius: 5px; margin-left: 4px; }
+.flow.full { color: var(--amber); border: 1px solid #ffb54766; }
+.flow.charge { color: var(--green); border: 1px solid #6fffa866; }
+.flow.drain { color: #ff9a9a; border: 1px solid #ff9a9a55; }
+#minimap { cursor: zoom-in; }
+.btn.small.wide { grid-column: 1 / -1; }
+.hud-right > #btn-map { margin: 0; }
+.bigmap { position: absolute; inset: 0; z-index: 7; display: grid; place-items: center; background: rgba(0,0,0,.72); }
+.bigmap[hidden] { display: none; }
+.bigmap-box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; width: min(1040px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto; }
+.bigmap-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.bigmap-head .btn { width: auto; }
+.bigmap-body { display: grid; grid-template-columns: minmax(0, 720px) 1fr; gap: 16px; }
+#bigmap-canvas { width: 100%; height: auto; aspect-ratio: 1; border-radius: 10px; border: 1px solid var(--line); background: #000; }
+.legend { list-style: none; padding: 0; margin: 12px 0; font-size: 13px; line-height: 2; }
+.legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-right: 8px; vertical-align: -2px; }
+.legend i.hatch { background: repeating-linear-gradient(45deg, #ff7a7a 0 2px, transparent 2px 5px); border: 1px solid #ff7a7a88; }
+.legend i.ring { border-radius: 50%; border: 2px solid; }
+.legend i.ring.amber { border-color: var(--amber); } .legend i.ring.cyan { border-color: var(--cyan); }
+.legend i.tri { width: 0; height: 0; border-radius: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 13px solid #fff; }
+.toggle-row { display: flex; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; }
+.toggle-row input { accent-color: var(--cyan); }
+#bigmap-dist div { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+@media (max-width: 760px) { .bigmap-body { grid-template-columns: 1fr; } }

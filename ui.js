@@ -220,7 +220,12 @@ const UI = (() => {
     $("#h-batt").textContent = `${fmt(sim.stored)} / ${fmt(cap)} Wh`;
     $("#h-batt-bar").style.width = `${pct * 100}%`;
     $("#h-batt-wrap").classList.toggle("warn", pct < 0.2);
-    $("#h-sun").textContent = h.lit > 0 ? `+${Math.round(C.solarPanelW * h.lit)} W` : "none";
+    const fl = sim.flow || { inW: 0, outW: 0 };
+    $("#h-power").textContent = `+${Math.round(fl.inW)} W in · −${Math.round(fl.outW)} W out`;
+    const net = fl.inW - fl.outW, tag = $("#h-flow");
+    if (fl.full && net > 0) { tag.textContent = `FULL · wasting ${Math.round(net)} W`; tag.className = "flow full"; }
+    else if (net >= 0) { tag.textContent = "CHARGING"; tag.className = "flow charge"; }
+    else { tag.textContent = "DRAINING"; tag.className = "flow drain"; }
     $("#h-slope").textContent = `${Math.abs(h.slope).toFixed(0)}°`;
     $("#h-slope").className = Math.abs(h.slope) > C.maxSlopeDeg * 0.8 ? "bad" : "";
     $("#h-signal").textContent = h.signal ? "EARTH ▮▮▮" : "NO SIGNAL";
@@ -310,6 +315,7 @@ const UI = (() => {
       <h3>Where the energy went</h3>
       ${row("Rolling", u.drive, "drive")}${row("Climbing", u.climb, "climb")}${row("Heaters", u.heaters, "heat")}${row("Headlights", u.lights, "house")}${row("Systems", u.systems, "house")}${row("Science", u.science, "inst")}
       <div class="stat-row"><span>☀ Solar collected</span><b>+${fmt(sim.solarWh)} Wh</b></div>
+      ${sim.wastedWh > 1 ? `<div class="stat-row warnline"><span>☀ Sunlight wasted (battery already full)</span><b>${fmt(sim.wastedWh)} Wh</b></div>` : ""}
       <h3>Trip</h3>
       <ul class="events">
         <li>Packed ${loadout.map((id) => item(id).short).join(", ")} (${Sim.massKg(loadout)} kg rover)</li>
@@ -319,35 +325,80 @@ const UI = (() => {
       <div class="btn-row"><button class="btn primary" data-act="launch">Fly again</button><button class="btn" data-act="toLoadout">Change payload</button><button class="btn" data-act="pick">Another crater</button></div>`, "center wide");
   }
 
-  // ---------- minimap ----------
-  let mini = null;
-  function drawMinimap() {
-    const cv = $("#minimap"), g = cv.getContext("2d"), T = terrain, n = T.n, S = cv.width;
+  // ---------- maps (minimap + full map share one renderer) ----------
+  const mapBase = {};
+  function baseImage(S, withSignal) {
+    const key = `${S}-${withSignal}`;
+    if (mapBase[key]) return mapBase[key];
+    const T = terrain, n = T.n, g = document.createElement("canvas").getContext("2d");
     const img = g.createImageData(S, S);
     let lo = Infinity, hi = -Infinity;
     for (const v of T.h) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
     for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
-      const i = Math.floor((px / S) * n), j = n - 1 - Math.floor((py / S) * n), k = j * n + i;
-      const t = (T.h[k] - lo) / (hi - lo), lit = T.lit[k];
-      const v = 30 + t * 150;
-      const o = (py * S + px) * 4;
-      img.data.set(lit === 0 ? [v * 0.35, v * 0.45, v * 0.8, 255] : [v, v, v * 0.95, 255], o);
+      const x = -T.half + (px / S) * 2 * T.half, y = T.half - (py / S) * 2 * T.half;
+      const z = Terrain.heightAt(T, x, y), t = (z - lo) / (hi - lo);
+      // Hillshade from the north-west so slopes read as relief.
+      const e = T.cell, shade = Math.max(0.55, Math.min(1.35, 1 + (Terrain.heightAt(T, x - e, y + e) - Terrain.heightAt(T, x + e, y - e)) / (e * 0.9)));
+      const v = (40 + t * 150) * shade;
+      let c = Terrain.litAt(T, x, y) === 0 ? [v * 0.35, v * 0.45, v * 0.85] : [v, v, v * 0.95];
+      if (withSignal && !Terrain.signalAt(T, x, y) && (px + py) % 6 < 2) c = [255, 110, 110];
+      img.data.set([...c, 255], (py * S + px) * 4);
     }
-    g.putImageData(img, 0, 0);
-    mini = g.getImageData(0, 0, S, S);
+    return (mapBase[key] = img);
   }
-  function drawRover(h) {
-    const cv = $("#minimap"), g = cv.getContext("2d"), T = terrain, S = cv.width;
-    if (!mini) return;
-    g.putImageData(mini, 0, 0);
+
+  function drawMap(cv, h, big) {
+    const g = cv.getContext("2d"), T = terrain, S = cv.width;
+    g.putImageData(baseImage(S, big && $("#bigmap-signal").checked), 0, 0);
     const toPx = (x, y) => [((x + T.half) / (2 * T.half)) * S, (1 - (y + T.half) / (2 * T.half)) * S];
-    g.fillStyle = "#6fe3ff";
-    T.beacons.forEach((b) => { const [x, y] = toPx(b.x, b.y); g.fillRect(x - 1, y - 1, 2, 2); });
-    T.sites.forEach((s) => { const [x, y] = toPx(s.x, s.y); g.strokeStyle = s.kind === "floor" ? "#6fe3ff" : "#ffb547"; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 5, 0, 7); g.stroke(); });
+    const k = S / 180; // scale marks with the canvas size
+    g.strokeStyle = "#6fe3ff"; g.lineWidth = 1.5 * k; g.setLineDash([4 * k, 3 * k]);
+    g.beginPath(); T.path.forEach((p, i) => { const [x, y] = toPx(p.x, p.y); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+    g.setLineDash([]);
+    T.sites.forEach((s) => {
+      const [x, y] = toPx(s.x, s.y);
+      g.strokeStyle = s.kind === "floor" ? "#6fe3ff" : "#ffb547"; g.lineWidth = 2 * k;
+      g.beginPath(); g.arc(x, y, 5 * k, 0, 7); g.stroke();
+      if (big) { g.fillStyle = "#fff"; g.font = `${5 * k}px system-ui`; g.fillText(s.label, x + 7 * k, y - 4 * k); }
+    });
+    const [sx, sy] = toPx(T.start.x, T.start.y);
+    g.fillStyle = "#ffb547"; g.fillRect(sx - 3 * k, sy - 3 * k, 6 * k, 6 * k);
+    if (big) {
+      g.fillStyle = "#fff"; g.font = `${5 * k}px system-ui`; g.fillText("Landing site", sx + 6 * k, sy + 10 * k);
+      // Scale bar and Earth direction.
+      const km = T.half * 2 / 1000, barKm = km > 60 ? 20 : km > 25 ? 10 : 5, barPx = (barKm / km) * S;
+      g.fillStyle = "#fff"; g.fillRect(14 * k, S - 14 * k, barPx, 2 * k);
+      g.font = `${5 * k}px ui-monospace, monospace`; g.fillText(`${barKm} km`, 14 * k, S - 18 * k);
+      g.fillText("↑ toward Earth (longitude 0°)", S / 2 - 40 * k, 10 * k);
+    }
     const [rx, ry] = toPx(h.x, h.y);
     g.save(); g.translate(rx, ry); g.rotate(h.heading);
-    g.fillStyle = "#fff"; g.beginPath(); g.moveTo(0, -7); g.lineTo(5, 5); g.lineTo(-5, 5); g.closePath(); g.fill();
+    g.fillStyle = "#fff"; g.strokeStyle = "#000"; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(0, -7 * k); g.lineTo(5 * k, 5 * k); g.lineTo(-5 * k, 5 * k); g.closePath(); g.fill(); g.stroke();
     g.restore();
+  }
+
+  let lastHud = null;
+  function drawMinimap() { Object.keys(mapBase).forEach((key) => delete mapBase[key]); }
+  function drawRover(h) { lastHud = h; drawMap($("#minimap"), h, false); }
+
+  function openMap() {
+    if ($("#hud").hidden || !lastHud) return;
+    World.setPaused(true);
+    $("#bigmap").hidden = false;
+    $("#bigmap-name").textContent = terrain.meta.name.toUpperCase();
+    redrawBigMap();
+  }
+  function redrawBigMap() {
+    drawMap($("#bigmap-canvas"), lastHud, true);
+    const p = lastHud;
+    $("#bigmap-dist").innerHTML = [{ label: "Landing site", x: terrain.start.x, y: terrain.start.y }, ...terrain.sites]
+      .map((s) => `<div><span>${s.label}</span><b>${(Math.hypot(s.x - p.x, s.y - p.y) / 1000).toFixed(1)} km</b></div>`).join("");
+  }
+  function closeMap() {
+    if ($("#bigmap").hidden) return;
+    $("#bigmap").hidden = true;
+    if ($("#panel").hidden && !sim.failurePending) World.setPaused(false);
   }
 
   let toastTimer;
@@ -398,6 +449,14 @@ const UI = (() => {
       if (t.dataset.act === "custom") selectCrater("custom");
     });
     $("#btn-end").addEventListener("click", endMission);
+    $("#btn-map").addEventListener("click", openMap);
+    $("#minimap").addEventListener("click", openMap);
+    $("#bigmap-close").addEventListener("click", closeMap);
+    $("#bigmap-signal").addEventListener("change", redrawBigMap);
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "KeyM" && !$("#hud").hidden) $("#bigmap").hidden ? openMap() : closeMap();
+      if (e.code === "Escape") closeMap();
+    });
     $("#btn-lights").addEventListener("click", () => World.toggleLights());
     $("#btn-cam").addEventListener("click", () => World.toggleCamera());
     $("#btn-site").addEventListener("click", () => { const s = World.nearSite(); if (s) openSite(s); });
