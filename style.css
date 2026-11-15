@@ -252,11 +252,19 @@ body.alarm #app::after { content: ""; position: absolute; inset: 0; pointer-even
   .hud-item, .battery { padding: 0 10px; font-size: 9px; }
   .hud-item b, .battery b { font-size: 12px; }
   .gauge { width: 70px; }
-  .lumi { top: 92px; bottom: auto; left: 12px; right: 12px; max-width: none; }
-  .lumi-text { font-size: 13px; }
-  .nextstep { top: 168px; max-width: calc(100% - 24px); font-size: 12px; }
-  .explain { bottom: auto; top: 220px; left: 12px; }
-  .hud-right { top: auto; bottom: 120px; right: 12px; width: 150px; }
+  /* Driving HUD on a phone, top to bottom: status strip, Next-step bar, then the controls
+     stacked at the bottom with THOX's message underneath, so nothing covers anything else. */
+  .nextstep { top: 96px; left: 12px; right: 12px; transform: none; max-width: none; width: auto; padding: 8px 12px; font-size: 12px; text-align: left; }
+  .lumi { top: 92px; bottom: auto; left: 12px; right: 12px; max-width: none; padding: 10px 12px; }
+  .lumi-text { font-size: 13px; line-height: 1.4; }
+  /* Only while driving (the HUD is showing) does THOX's message move to the bottom. On the title,
+     menus and reports it stays at the top, clear of the bottom sheets and their buttons. */
+  .hud:not([hidden]) ~ .lumi { top: auto; bottom: 12px; }
+  .hud:not([hidden]) ~ .lumi .lumi-text { font-size: 12px; }
+  .explain { bottom: auto; top: 156px; left: 12px; width: calc(100% - 24px); z-index: 4; }
+  .toast { top: 150px; max-width: calc(100% - 24px); text-align: center; }
+  .hud-right { top: auto; bottom: 134px; right: 12px; width: 150px; }
+  .touchpad { bottom: 134px; }
   #minimap { width: 150px; height: 150px; }
   .keys { display: none; }
   .bigmap-body { grid-template-columns: 1fr; }
@@ -283,4 +291,31 @@ body.alarm #app::after { content: ""; position: absolute; inset: 0; pointer-even
 .verify .v.no .mark { color: var(--bad); }
 @media (max-width: 760px) {
   .panel-modal { top: auto; left: 0; right: 0; bottom: 0; width: auto; transform: none; max-height: 70vh; border-width: 1px 0 0 0; }
+}
+
+/* ---------- short screens (a phone held sideways, or a small browser window) ----------
+   Compact driving HUD: the controls column scrolls instead of running off the screen, the
+   status strip no longer sits on top of it, and the title fits. Comes last so it wins. */
+@media (max-height: 520px) {
+  .hud-top { padding: 6px 14px 12px; row-gap: 2px; }
+  .nextstep { top: 66px; left: 50%; right: auto; transform: translateX(-50%); width: auto; max-width: calc(100% - 300px); font-size: 12px; padding: 6px 12px; text-align: center; }
+  .hud-right { top: 66px; bottom: auto; right: 12px; width: 150px; max-height: calc(100vh - 78px); overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; gap: 6px; }
+  .hud-right > * { min-width: 0; }
+  #minimap { width: 130px; height: 130px; justify-self: center; }
+  .reqbox { padding: 8px; }
+  .reqbox ul { font-size: 11px; line-height: 1.5; }
+  .explain { bottom: auto; top: 112px; left: 12px; width: min(340px, calc(100% - 200px)); z-index: 4; }
+  .toast { top: 108px; }
+  .lumi { top: 12px; bottom: auto; }
+  .hud:not([hidden]) ~ .lumi { top: auto; bottom: 12px; }
+  .panel-hero { top: auto; bottom: 14px; left: 5vw; right: auto; width: min(600px, 62vw); }
+  .panel-hero h1 { font-size: 34px; margin: 6px 0 10px; }
+  .panel-hero .lead { font-size: 14px; margin-bottom: 8px; }
+  .panel-hero .btn { margin-top: 8px; padding: 11px 18px; }
+  .panel-hero .fine { font-size: 10px; margin-top: 8px; }
+}
+@media (max-height: 520px) and (pointer: coarse) {
+  .touchpad { bottom: 10px; left: 12px; }
+  .touchpad button { width: 44px; height: 44px; }
+  .hud:not([hidden]) ~ .lumi { left: 170px; right: auto; max-width: calc(100% - 360px); }
 }

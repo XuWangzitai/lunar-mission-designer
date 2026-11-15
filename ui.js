@@ -239,7 +239,7 @@ const UI = (() => {
     shown.clear();
     $("#explain").hidden = true;
     say(C.say.start);
-    toast("Hold W or ↑ to drive · A/D to steer · M for the map");
+    if (!C.demo) toast(matchMedia("(pointer: coarse)").matches ? "Hold ▲ to drive · ◀ ▶ to steer" : "Hold W or ↑ to drive · A/D to steer · M for the map");
     lastLowWarn = false;
   }
 
