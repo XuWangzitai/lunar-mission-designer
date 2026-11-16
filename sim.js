@@ -86,7 +86,8 @@ const Sim = (() => {
       runs: [], pending: [], uplinked: [], inShadow: false, everShadow: false, signal: true,
       stuck: false, done: false, endReason: null,
       // Random events: off unless asked for (the forecast and most tests leave them out).
-      ev: { on: !!opts.events, rng: seeded(opts.seed != null ? opts.seed : Math.floor(Math.random() * 2 ** 32)), count: 0, lastH: -99, log: [] },
+      // forceEvent (demo video): that one event happens as soon as it can, and nothing random does.
+      ev: { on: !!opts.events || !!opts.forceEvent, force: opts.forceEvent || null, rng: seeded(opts.seed != null ? opts.seed : Math.floor(Math.random() * 2 ** 32)), count: 0, lastH: -99, log: [] },
       eventPending: null,
       mods: { solar: { mul: 1, untilH: 0 }, heat: { mul: 1, untilH: 0 }, uplinkBlockedUntilH: 0 },
     };
@@ -119,8 +120,8 @@ const Sim = (() => {
   function rollEvent(s, dtH, dist, env) {
     if (!canHaveEvent(s)) return null;
     const p = 1 - Math.exp(-C.events.perHour * (C.eventRate || 1) * dtH);
-    if (s.ev.rng() >= p) return null;
-    const ok = C.events.list.filter((e) => !hadEvent(s, e.id) && (
+    if (!s.ev.force && s.ev.rng() >= p) return null;
+    const ok = C.events.list.filter((e) => !hadEvent(s, e.id) && (!s.ev.force || e.id === s.ev.force) && (
       e.when === "sun" ? env.lit > 0 && dist > 0
         : e.when === "slope" ? dist > 0 && Math.abs(env.slopeDeg || 0) > 6
           : e.when === "shadow" ? env.shadow : false));
@@ -207,7 +208,7 @@ const Sim = (() => {
     if (env.signal !== s.signal) { s.signal = env.signal; events.push(env.signal ? "signalBack" : "signalLost"); }
     if (s.signal && s.pending.length && s.timeH >= s.mods.uplinkBlockedUntilH) {
       // Sometimes the first try at sending fails (an event with a choice).
-      if (canHaveEvent(s) && !hadEvent(s, "glitch") && s.ev.rng() < C.events.glitchChance * (C.eventRate || 1)) events.push(trigger(s, eventDef("glitch")));
+      if (canHaveEvent(s) && !hadEvent(s, "glitch") && (!s.ev.force || s.ev.force === "glitch") && s.ev.rng() < C.events.glitchChance * (C.eventRate || 1)) events.push(trigger(s, eventDef("glitch")));
       else { s.uplinked.push(...s.pending); s.pending = []; events.push("uplink"); }
     }
     if (!s.done) { const e = rollEvent(s, dtH, dist, env); if (e) events.push(e); }

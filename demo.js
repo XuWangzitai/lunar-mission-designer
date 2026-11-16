@@ -6,10 +6,11 @@
 const C = CONFIG;
 C.demo = true;
 C.forceFailure = "shadow";
+C.forceEvent = "dust";        // one event, always the same, right after landing
 Sim.applyDifficulty("normal"); // the video always shows the mission as designed
 
 const SPEED = 5;              // time-lapse while driving
-const CRATER = "faustini";    // shortest route of the six
+const MISSION = "first-light"; // Faustini: the shortest route of the six
 const $ = (s) => document.querySelector(s);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const t0 = performance.now();
@@ -109,23 +110,19 @@ async function play() {
 
   // 1. Title over the real Shackleton terrain.
   caption("Real lunar craters, built from NASA LRO laser-altimeter data");
-  await wait(2200);
+  await wait(1900);
 
-  // 2. Crater picker.
+  // 2. Story missions on real craters.
   await click("[data-act=briefing]");
   await click("[data-act=missions]");
-  await click("[data-act=pick]");
-  await until(() => $(`[data-act=crater][data-id=${CRATER}]`));
-  caption("Six real south-pole craters, measured from LOLA");
-  const panel = $("#panel");
-  panel.scrollTo({ top: panel.scrollHeight * 0.35, behavior: "smooth" });
-  await wait(800);
-  await click(`[data-act=crater][data-id=${CRATER}]`);
-  await wait(900);
+  await until(() => $(`[data-act=mission][data-id=${MISSION}]`));
+  caption("Five missions on real craters · Easy, Normal, Hard · up to 3 stars");
+  await wait(1700);
+  await click(`[data-act=mission][data-id=${MISSION}]`);
+  await until(() => $("[data-act=toggle][data-id=backup]"));
+  await wait(300);
 
   // 3. The decision: backup battery or one more instrument.
-  await click("[data-act=toLoadout]");
-  await wait(300);
   caption("The choice: one more instrument, or a backup battery?");
   const showForecast = () => $(".forecast") && $(".forecast").scrollIntoView({ block: "center", behavior: "smooth" });
   await click("[data-act=toggle][data-id=backup]");
@@ -144,10 +141,18 @@ async function play() {
   // 4. Drive down into permanent shadow (time-lapse).
   C.timeScale *= SPEED;
   await click("[data-act=launch]");
-  await wait(600);
-  caption("Into permanent shadow: no sunlight, no signal, heaters on");
+  await wait(400);
   lapse.hidden = false;
   const T = World.terrain();
+  // 4a. A random event right after landing: dust on the panels, and a choice.
+  World.aim(T.path[1].x, T.path[1].y);
+  World.setTouch("touchUp", true);
+  await until(() => $("#panel:not([hidden]) [data-act=choose]"), 4000);
+  World.setTouch("touchUp", false);
+  caption("Random events force choices: clean the panels, or lose solar power?");
+  await wait(1800);
+  await click("#panel [data-act=choose]");
+  caption("Into permanent shadow: no sunlight, no signal, heaters on");
   const path = T.path, mid = Math.floor(path.length / 2);
   for (const q of path.slice(1, mid + 1)) await driveTo(q.x, q.y);
   lapse.hidden = true;
@@ -175,8 +180,8 @@ async function play() {
   // 7. Mission report.
   await click("#btn-end");
   await until(() => $(".tier"), 6000);
-  caption("Every result traced back to the decisions that caused it");
-  await wait(1800);
+  caption("Every result traced to your decisions · stars · challenge a friend");
+  await wait(2000);
 
   // 8. End card.
   caption("");

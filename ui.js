@@ -348,7 +348,7 @@ const UI = (() => {
   let siteOpen = null, lastLowWarn = false;
   function launch() {
     // Demo mode fixes the fault timing and has no random events, so the video is the same every take.
-    sim = Sim.create(terrain, loadout, { ...(C.forceFailure ? { failureTrigger: C.forceFailure } : {}), events: !C.demo });
+    sim = Sim.create(terrain, loadout, { ...(C.forceFailure ? { failureTrigger: C.forceFailure } : {}), events: !C.demo, forceEvent: C.forceEvent });
     hidePanel();
     $("#hud").hidden = false;
     drawMinimap();
