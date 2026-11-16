@@ -262,6 +262,45 @@ for (const c of CRATERS) {
   check("verdict: stranded without a backup gets the backup joke", v0.stars === 0 && v0.why === CONFIG.thox.why.stuckNoBackup);
 }
 
+// Ask THOX questions: each one only when it fits, and every answer reads cleanly.
+{
+  const Advisor = require("../advisor.js"), Q = (list) => list.join(",");
+  const broken = (t) => !t || /undefined|NaN|\{\w+\}|Infinity/.test(t);
+  check("packing: backup question only when no backup is packed",
+    !Advisor.packingQuestions(["neutron", "backup"], CONFIG.missions[0]).includes("backup") && Advisor.packingQuestions(["neutron"], CONFIG.missions[0]).includes("backup"));
+  check("packing: 3-star question only on story missions, not Sandbox",
+    Advisor.packingQuestions(["neutron"], CONFIG.missions[0]).includes("stars") && !Advisor.packingQuestions(["neutron"], null).includes("stars"));
+  let bad = "";
+  for (const m of CONFIG.missions) {
+    const T = TERR[m.crater];
+    for (const L of [["neutron", "drill", "backup"], ["neutron", "ir", "drill", "camera"], ["camera"]]) {
+      for (const id of Advisor.packingQuestions(L, m)) {
+        const t = id === "packed" ? Advisor.packingIssues(T, L, m).flat().join(" ") : Advisor.packingAnswer(id, T, L, m);
+        if (broken(t)) bad = bad || `${m.id} [${L}] ${id}: ${t}`;
+      }
+    }
+  }
+  check("every packing answer on every mission reads cleanly", !bad, bad);
+
+  const T = TERR.faustini, s = Sim.create(T, ["neutron", "drill"], { failureTrigger: "shadow" });
+  const env = { lit: 1, shadow: false, signal: true, lights: false, slopeDeg: 0 };
+  Sim.tick(s, 0.1, 50, 0, env);
+  check("driving, at the landing site: only 'what next'", Q(Advisor.driveQuestions(s)) === "next", Q(Advisor.driveQuestions(s)));
+  Sim.tick(s, 0.1, 50, 0, { ...env, signal: false });
+  check("driving, Earth out of view: adds 'can we make it back'", Q(Advisor.driveQuestions(s)) === "next,back", Q(Advisor.driveQuestions(s)));
+  Sim.tick(s, 0.1, 50, 0, { ...env, lit: 0, shadow: true, deep: true, signal: false, lights: true });
+  Sim.respond(s, "ration");
+  check("driving, in the shadow after the fault: adds 'draining' and 'battery'", Q(Advisor.driveQuestions(s)) === "next,back,drain,fault", Q(Advisor.driveQuestions(s)));
+  Sim.runScience(s, T.sites[2], ["drill"]);
+  check("driving, data waiting in the crater: adds 'why can't we send'", Advisor.driveQuestions(s).includes("noData"));
+  const pos = { x: T.sites[2].x, y: T.sites[2].y };
+  const answers = Advisor.driveQuestions(s).map((id) => [id, Advisor.driveAnswer(id, s, T, pos)]);
+  const badA = answers.find(([, t]) => broken(t));
+  check("every driving answer reads cleanly", !badA, badA ? badA.join(": ") : "");
+  Sim.tick(s, 0.1, 50, 0, env);
+  check("back in view of Earth: data uploads and those questions go away", s.pending.length === 0 && !Advisor.driveQuestions(s).includes("noData") && !Advisor.driveQuestions(s).includes("back"));
+}
+
 // Rover engineering: defaults reproduce the standard rover; limits can't be broken.
 const std = Sim.applyEngineering({});
 check("standard rover is 250 kg", std.baseMassKg === 250, `got ${std.baseMassKg}`);

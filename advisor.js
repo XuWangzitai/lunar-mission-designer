@@ -83,7 +83,82 @@ const Advisor = (() => {
     return { stars: null, line: why || "Clean mission. Every requirement met and the data is home.", why: null };
   }
 
-  return { packingIssues, returnCost, driveHint, verdict };
+  // ---------- questions the player can ask ----------
+  // Each question is offered only when it fits the moment; answers use the player's own rover.
+  const n = (v) => Math.round(v).toLocaleString("en-US");
+  const ROLE = {
+    neutron: "maps hydrogen, the clue that ice may be near. R1 needs it at two sites, the rim and the wall.",
+    ir: "spots ice on the surface. It counts for R2 and earns double in the cold trap.",
+    drill: "digs under the dust to confirm buried ice. The only way to meet R3, and it counts for R2 too.",
+    camera: "earns a few points at every site. No requirement needs it.",
+    backup: "a second battery. If the main pack fails, it's the reserve for the climb out.",
+    kit: "if the main pack fails, three hours of swapping cells brings it back to 80 %.",
+  };
+
+  function packingQuestions(loadout, mission) {
+    const q = ["packed"];
+    if (!loadout.includes("backup")) q.push("backup");
+    q.push("instruments");
+    if (mission) q.push("stars");
+    return q;
+  }
+
+  // Returns HTML for the answer box. "packed" is handled by the stepped hints (packingIssues).
+  function packingAnswer(id, terrain, loadout, mission) {
+    if (id === "backup") {
+      const calm = S.predict(terrain, loadout), after = C.mainBatteryWh * C.failure.mainFraction;
+      return `If a cell shorts, my main pack drops to ${Math.round(C.failure.mainFraction * 100)} % of ${n(C.mainBatteryWh)} Wh, which is ${n(after)} Wh. Climbing back out of this crater costs about ${n(calm.used.climb)} Wh on its own (m·g·h ÷ η). A backup adds ${n(C.backupBatteryWh)} Wh for ${S.item("backup").mass} kg. Whether that's worth an instrument's mass is your call.`;
+    }
+    if (id === "instruments") {
+      return C.items.map((it) => `<b>${it.name}</b> · ${it.mass} kg${it.energy ? ` · ${it.energy} Wh per run` : ""}: ${ROLE[it.id]}`).join("<br>");
+    }
+    if (id === "stars" && mission) {
+      const worst = FAULTS.map(([f, when]) => ({ when, st: S.stars(mission, S.predict(terrain, loadout, { failure: f }).state) }))
+        .reduce((a, b) => (b.st.count < a.st.count ? b : a));
+      const atRisk = !worst.st.full ? "the first one: all four requirements" : !worst.st.target ? `the second one: ${mission.target} science` : !worst.st.margin ? "the third one: 25 % battery left" : null;
+      return `★ all four requirements met. ★★ also at least ${mission.target} science returned. ★★★ also at least 25 % of the battery left at the end. `
+        + (atRisk ? `With this design, if my battery fails ${worst.when}, the star at risk is ${atRisk}.` : "With this design, all three hold up even if my battery fails.");
+    }
+    return "";
+  }
+
+  function driveQuestions(sim) {
+    const q = ["next"];
+    if (!sim.signal) q.push("back");
+    if (sim.inShadow) q.push("drain");
+    if (!sim.signal && sim.pending.length) q.push("noData");
+    if (sim.failed) q.push("fault");
+    return q;
+  }
+
+  function driveAnswer(id, sim, terrain, pos) {
+    if (id === "next") { const h = driveHint(sim); return `<b>${h.next}</b> ${h.why}`; }
+    if (id === "back") {
+      const back = returnCost(sim, terrain, pos.x, pos.y), cap = S.capacity(sim);
+      if (back.inView) return "Earth is in view right here, so we can already send data home.";
+      const pct = Math.max(0, Math.round((100 * (sim.stored - back.wh)) / cap));
+      const mj = (sim.massKg * C.gMoon * back.climbM) / C.drivetrainEfficiency / 1e6;
+      return `Getting back into view of Earth from here costs about <b>${n(back.wh)} Wh</b>. Climbing ${n(back.climbM)} m is ${n(back.climbWh)} Wh of that: m·g·h ÷ η = ${Math.round(sim.massKg)} kg × ${C.gMoon} m/s² × ${n(back.climbM)} m ÷ ${C.drivetrainEfficiency} = ${mj.toFixed(2)} MJ, and 1 Wh is 3,600 J. `
+        + `We have ${n(sim.stored)} Wh, so about <b>${pct} %</b> would be left when we get there${pct < 25 ? ". That's tight." : "."}`;
+    }
+    if (id === "drain") {
+      const K = sim.facts.floorTempK, heat = C.heaterW(K), out = Math.max(1, (sim.flow && sim.flow.outW) || heat + C.systemsW);
+      return `We're in permanent shadow, so the solar panels give 0 W. At ${K} K (${K - 273} °C) the heaters need ${heat} W to keep my electronics alive, the computers ${C.systemsW} W, and the headlights ${C.headlightsW} W when they're on. `
+        + `Right now about ${n(out)} W is going out, so ${n(sim.stored)} Wh lasts roughly ${(sim.stored / out).toFixed(1)} hours like this, less while driving.`;
+    }
+    if (id === "noData") {
+      return `${sim.pending.length} result${sim.pending.length > 1 ? "s are" : " is"} stored on board. Radio needs a straight line to Earth, and from down here the crater wall is in the way. As soon as EARTH LINK shows in the top bar, everything uploads by itself.`;
+    }
+    if (id === "fault") {
+      const after = C.mainBatteryWh * C.failure.mainFraction;
+      const now = sim.response === "repair" ? (S.repairing(sim) ? ` The repair is under way: ${C.repair.hours} hours, then the main pack is back to ${Math.round(C.repair.mainFraction * 100)} %.` : " The repair is done.")
+        : sim.backupCap ? ` The backup still adds ${n(sim.backupCap)} Wh, so we have ${n(S.capacity(sim))} Wh of capacity in total.` : " No backup, so every watt-hour counts now.";
+      return `A cell in my main pack shorted, so it went from ${n(C.mainBatteryWh)} Wh to ${n(after)} Wh of capacity.${now}`;
+    }
+    return "";
+  }
+
+  return { packingIssues, returnCost, driveHint, verdict, packingQuestions, packingAnswer, driveQuestions, driveAnswer };
 })();
 
 if (typeof module !== "undefined") module.exports = Advisor;

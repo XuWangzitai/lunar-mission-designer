@@ -186,6 +186,18 @@ const CONFIG = {
       good: ["This design holds up even if my battery fails. I'd fly it. Want to push for more science, or keep the margin?"],
     },
     noMore: "That's all I've got. The rest is your call, Mission Designer.",
+    // Questions the player can ask. Each one only shows up when it makes sense (see advisor.js).
+    questions: {
+      packed: "Is my rover packed right?",
+      backup: "Why would I need a backup battery?",
+      instruments: "What does each instrument do?",
+      stars: "How do I get 3 stars?",
+      next: "What should I do next?",
+      back: "Can we make it back?",
+      drain: "Why is the battery draining so fast?",
+      noData: "Why can't we send the data?",
+      fault: "What happened to the battery?",
+    },
     // Report verdicts, chosen by stars (story missions) or tier (Sandbox).
     verdict: {
       3: ["Three stars. You planned it, you drove it, you brought it home. I'm honestly impressed.", "Perfect mission. If I had hands, I'd applaud. I have wheels, so imagine a little spin."],

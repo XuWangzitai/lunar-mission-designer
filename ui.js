@@ -323,44 +323,56 @@ const UI = (() => {
     return true;
   }
 
-  // ---------- rover engineering ----------
-  // ---------- Ask THOX (hints, never the full answer) ----------
-  // Hints walk through the design's problems: a nudge first, the specifics on the next ask.
-  // Changing the design starts the hints over.
-  const thox = { key: "", n: 0, text: "" };
+  // ---------- Ask THOX: pick a question, THOX answers about your own rover ----------
+  // Only the questions that fit the moment are offered. "Is my rover packed right?" walks
+  // through the design's problems: a nudge first, the specifics on the next ask, never the
+  // full answer. Changing the design starts it over.
+  const thox = { key: "", n: 0, q: null, text: "" };
   const designKey = () => JSON.stringify([terrain && terrain.meta.name, loadout, mission && mission.id, difficulty, Object.values(C.engineering).map((e) => e.value)]);
+  const plain = (html) => html.replace(/<br>/g, " ").replace(/<[^>]+>/g, "");
+  const firstSentence = (t) => (t.match(/^.*?[.!?](\s|$)/) || [t])[0].trim();
   function thoxBox() {
-    if (thox.key !== designKey()) { thox.key = designKey(); thox.n = 0; thox.text = ""; }
-    const total = thox.n ? Advisor.packingIssues(terrain, loadout, mission).flat().length : 1;
-    const label = !thox.n ? "Ask THOX" : thox.n > total ? "No more hints" : "Another hint";
-    return `<div class="thox-box"><div class="thox-head"><span class="lumi-name">${C.roverName}</span>
-      <button class="btn ghost small" data-act="askThox" ${thox.n > total ? "disabled" : ""}>${label}</button></div>
-      <p id="thox-hint" class="small">${thox.text || "Not sure if this design works? Ask me. I'll point you the right way, but the choices are yours."}</p></div>`;
+    if (thox.key !== designKey()) { thox.key = designKey(); thox.n = 0; thox.q = null; thox.text = ""; }
+    const qs = Advisor.packingQuestions(loadout, mission);
+    if (thox.q && !qs.includes(thox.q)) { thox.q = null; thox.text = ""; }
+    const hintsLeft = Advisor.packingIssues(terrain, loadout, mission).flat().length >= thox.n;
+    const btn = (id) => {
+      const label = id === "packed" && thox.n ? (hintsLeft ? "Another hint, please" : "No more hints") : C.thox.questions[id];
+      return `<button class="btn ghost small q ${thox.q === id ? "on" : ""}" data-act="askThox" data-id="${id}" ${id === "packed" && thox.n && !hintsLeft ? "disabled" : ""}>${label}</button>`;
+    };
+    return `<div class="thox-box"><div class="thox-head"><span class="lumi-name">ASK ${C.roverName}</span></div>
+      <div class="thox-qs">${qs.map(btn).join("")}</div>
+      <p id="thox-hint" class="small">${thox.text || "Pick a question. I'll point you the right way, but the choices are yours."}</p></div>`;
   }
-  function askThox() {
-    const hints = Advisor.packingIssues(terrain, loadout, mission).flat();
-    thox.text = thox.n < hints.length ? hints[thox.n] : C.thox.noMore;
-    thox.n++;
+  function askThox(id) {
+    thox.q = id;
+    if (id === "packed") {
+      const hints = Advisor.packingIssues(terrain, loadout, mission).flat();
+      thox.text = thox.n < hints.length ? hints[thox.n] : C.thox.noMore;
+      thox.n++;
+    } else thox.text = Advisor.packingAnswer(id, terrain, loadout, mission);
     const box = $(".thox-box");
     if (box) box.outerHTML = thoxBox();
-    say(thox.text);
+    say(id === "instruments" ? "Here is what each one is for. Every kilogram has to climb back out." : firstSentence(plain(thox.text)));
   }
 
-  // While driving: what's next and why, plus the energy needed to get back into view of Earth.
+  // While driving: a menu of the questions that fit right now; time stops while it's open.
   function askThoxDrive() {
     if ($("#hud").hidden || !sim || sim.done || sim.failurePending || sim.eventPending || !$("#panel").hidden) return;
     World.setPaused(true);
-    const p = World.position(), h = Advisor.driveHint(sim), back = Advisor.returnCost(sim, terrain, p.x, p.y);
-    const left = sim.stored - back.wh, pct = Math.round((100 * left) / Sim.capacity(sim));
-    const energy = back.inView ? "We're in view of Earth right now, so data goes home as soon as we collect it."
-      : `Getting back into view of Earth from here costs about <b>${fmt(back.wh)} Wh</b>, ${fmt(back.climbWh)} Wh of it just for climbing ${fmt(back.climbM)} m (m·g·h ÷ η = ${Math.round(sim.massKg)} kg × ${C.gMoon} m/s² × ${fmt(back.climbM)} m ÷ ${C.drivetrainEfficiency} = ${((sim.massKg * C.gMoon * back.climbM) / C.drivetrainEfficiency / 1e6).toFixed(2)} MJ, and 1 Wh = 3,600 J). We have ${fmt(sim.stored)} Wh, so about <b>${Math.max(0, pct)} %</b> would be left when we get there${pct < 25 ? ". That's tight" : ""}.`;
-    setPanel(`<div class="eyebrow">ASK ${C.roverName}</div>
-      <h2>${h.next}</h2><p>${h.why}</p>
-      <h3>Energy check</h3><p class="small">${energy}</p>
+    setPanel(`<div class="eyebrow">ASK ${C.roverName}</div><h2>What do you want to know?</h2>
+      <div class="thox-qs">${Advisor.driveQuestions(sim).map((id) => `<button class="btn ghost small q" data-act="askDrive" data-id="${id}">${C.thox.questions[id]}</button>`).join("")}</div>
+      <p id="thox-answer" class="small"></p>
       <button class="btn primary" data-act="closeSite">Keep driving</button>`, "modal");
-    say(h.next);
+  }
+  function answerDrive(id) {
+    const text = Advisor.driveAnswer(id, sim, terrain, World.position());
+    $("#thox-answer").innerHTML = text;
+    document.querySelectorAll("#panel .q").forEach((b) => b.classList.toggle("on", b.dataset.id === id));
+    say(firstSentence(plain(text)));
   }
 
+  // ---------- rover engineering ----------
   let engOpen = false;
   const engUnit = (k, v) => `${k === "batteryWh" ? fmt(v) : v} ${C.engineering[k].unit}`;
   function engineeringPanel() {
@@ -831,7 +843,7 @@ const UI = (() => {
         crater: () => selectCrater(id),
         toLoadout: loadoutScreen, toggle: () => toggle(id), launch,
         closeSite, runSite, siteDone,
-        choose: () => chooseEvent(id), askThox,
+        choose: () => chooseEvent(id), askThox: () => askThox(id), askDrive: () => answerDrive(id),
         share: () => shareLink(false), shareResult: () => shareLink(true),
         respond: () => { Sim.respond(sim, id); hidePanel(); World.setPaused(false); if (id === "repair") say("Swapping cells. Three hours."); },
       })[t.dataset.act]?.();

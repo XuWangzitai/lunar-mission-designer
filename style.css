@@ -342,3 +342,8 @@ body.alarm #app::after { content: ""; position: absolute; inset: 0; pointer-even
 .thox-verdict p { margin: 6px 0 0; }
 .portrait-only { display: none; }
 @media (pointer: coarse) and (orientation: portrait) { .portrait-only { display: block; } }
+.thox-qs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.thox-qs .btn.q { width: auto; margin: 0; padding: 7px 10px; font-size: 11px; letter-spacing: 0.04em; text-transform: none; text-align: left; }
+.thox-qs .btn.q.on { background: var(--fg); color: #000; border-color: var(--fg); }
+#thox-answer:empty { display: none; }
+#thox-answer, #thox-hint { line-height: 1.55; }
