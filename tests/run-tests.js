@@ -138,6 +138,32 @@ for (const c of CRATERS) {
   check("the fault fires once the rover is deep in the crater's shadow", s.failed && s.failurePending);
 }
 
+// Difficulty and story missions.
+{
+  const d = Sim.applyDifficulty("normal");
+  check("Normal difficulty keeps the designed balance", CONFIG.failure.mainFraction === 0.4 && (CONFIG.solarMul || 1) === 1 && d.label === "Normal");
+  check("unknown difficulty falls back to Normal", Sim.applyDifficulty("nightmare") && CONFIG.difficulty === "normal");
+  const T = TERR.haworth, worse = {};
+  for (const id of ["easy", "normal", "hard"]) { Sim.applyDifficulty(id); worse[id] = Sim.predict(T, ["neutron", "drill", "backup"], { failure: "shadow" }).endStored; }
+  check("battery left after a fault: Easy > Normal > Hard", worse.easy > worse.normal && worse.normal > worse.hard, JSON.stringify(worse));
+  Sim.applyDifficulty("normal");
+  const good = { chassisKg: 170, batteryWh: 8000, solarW: 300, efficiency: 60, speedKmh: 4 };
+  for (const m of CONFIG.missions) {
+    const MT = TERR[m.crater];
+    check(`${m.name}: crater exists and the cold trap is reachable`, !!MT && MT.trapReachable);
+    Sim.applyEngineering(CONFIG.presets.standard);
+    const safe = Sim.stars(m, Sim.predict(MT, ["neutron", "drill", "backup"], { failure: "shadow" }).state).count;
+    Sim.applyEngineering(good);
+    const smart = Sim.stars(m, Sim.predict(MT, ["neutron", "ir", "drill"], { failure: "shadow" }).state).count;
+    const smartOk = Sim.stars(m, Sim.predict(MT, ["neutron", "ir", "drill"], { failure: "none" }).state).count;
+    check(`${m.name}: safe payload still earns a star after a fault (${safe}★)`, safe >= 1);
+    check(`${m.name}: a well-engineered max-science rover earns 3★ without a fault and ≥2★ with one (${smartOk}★/${smart}★)`, smartOk === 3 && smart >= 2);
+  }
+  Sim.applyEngineering(CONFIG.presets.standard);
+  const s0 = Sim.create(TERR.faustini, ["neutron"], { failureTrigger: "none" });
+  check("no science means no stars", Sim.stars(CONFIG.missions[0], s0).count === 0);
+}
+
 // Rover engineering: defaults reproduce the standard rover; limits can't be broken.
 const std = Sim.applyEngineering({});
 check("standard rover is 250 kg", std.baseMassKg === 250, `got ${std.baseMassKg}`);

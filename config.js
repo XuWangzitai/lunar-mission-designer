@@ -63,6 +63,35 @@ const CONFIG = {
   ],
   massLimit: 35,
 
+  // Difficulty changes how hard the battery fault hits, how strong the Sun is, and how often
+  // random events happen. Normal is the balance all the tests and forecasts were built on.
+  difficulties: {
+    easy: { label: "Easy", note: "Milder battery fault, stronger panels, fewer surprises", failureMainFraction: 0.6, solarMul: 1.25, eventRate: 0.5 },
+    normal: { label: "Normal", note: "The mission as designed", failureMainFraction: 0.4, solarMul: 1, eventRate: 1 },
+    hard: { label: "Hard", note: "Severe battery fault, weaker panels, more surprises", failureMainFraction: 0.25, solarMul: 0.8, eventRate: 1.6 },
+  },
+
+  // Story missions. Facts in `story` are real (sources in README); the scoring targets are game values.
+  // Stars: 1 = all four requirements met; 2 = also return at least `target` science;
+  // 3 = also finish with at least 25 % of the battery left.
+  missions: [
+    { id: "first-light", name: "First Light", crater: "faustini", level: "Start here",
+      story: "Faustini has the shortest safe route of the six into permanent shadow, about 11 km. A good first mission: learn the controls, find the cold trap, and get the data home.",
+      target: 80 },
+    { id: "lcross", name: "Return to LCROSS", crater: "cabeus", level: "Long drive",
+      story: "In 2009 NASA crashed the spent LCROSS rocket stage into Cabeus and measured about 5.6 % water ice in the debris. Drive in and confirm it from the ground. The route is the longest of the six, so energy is tight.",
+      target: 140 },
+    { id: "artemis-scout", name: "Artemis Scout", crater: "haworth", level: "Medium",
+      story: "Haworth is one of NASA's candidate landing regions for Artemis III, the first crewed landing near the south pole. Scout its nearest cold trap so a future crew knows where the ice is.",
+      target: 100 },
+    { id: "biggest-shadow", name: "Biggest Shadow", crater: "shoemaker", level: "Medium",
+      story: "Shoemaker's floor is the largest permanently shadowed area of the six craters here, about 1,080 km² that sunlight never touches. Plan your heaters: you'll spend a long time in the cold.",
+      target: 100 },
+    { id: "the-pole", name: "The Pole Itself", crater: "shackleton", level: "Hardest",
+      story: "Shackleton sits almost exactly on the lunar south pole. Its walls average about 30°, close to the steepest that loose soil can hold. The only safe way into its shadow is a 25 km switchback.",
+      target: 100 },
+  ],
+
   requirements: [
     { id: "R1", title: "Hydrogen survey", text: "Run the Neutron Spectrometer at 2 different sites.", why: "Hydrogen is a clue to water. Measuring at two places shows how it changes toward the crater." },
     { id: "R2", title: "Ice detected", text: "Run the IR Spectrometer or Drill at the cold trap.", why: "The cold trap is where ice can survive, so that's where you look." },

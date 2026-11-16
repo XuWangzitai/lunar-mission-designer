@@ -38,6 +38,26 @@ const Sim = (() => {
     return { ...v, batteryKg, solarKg, baseMassKg: C.roverBaseMassKg };
   }
 
+  // Difficulty: how hard the battery fault hits, panel strength, and the random-event rate.
+  function applyDifficulty(id) {
+    const d = C.difficulties[id] || C.difficulties.normal;
+    C.difficulty = C.difficulties[id] ? id : "normal";
+    C.failure.mainFraction = d.failureMainFraction;
+    C.solarMul = d.solarMul;
+    C.eventRate = d.eventRate;
+    return d;
+  }
+
+  // Stars for a story mission: 1 = all four requirements, 2 = also the science target,
+  // 3 = also at least 25 % of the battery left at the end.
+  function stars(mission, s) {
+    const r = evaluate(s);
+    const full = r.tier === "full" && !s.stuck;
+    const target = full && r.score >= mission.target;
+    const margin = target && s.stored >= 0.25 * capacity(s);
+    return { count: full ? (target ? (margin ? 3 : 2) : 1) : 0, full, target, margin, score: r.score, batteryPct: Math.round((100 * s.stored) / capacity(s)) };
+  }
+
   function massKg(loadout) {
     return C.roverBaseMassKg + loadout.reduce((m, id) => m + item(id).mass, 0);
   }
@@ -102,7 +122,7 @@ const Sim = (() => {
     if (env.shadow) drain(s, C.heaterW(s.facts.floorTempK) * dtH, "heaters");
     if (env.lights) drain(s, C.headlightsW * dtH, "lights");
 
-    const solar = C.solarPanelW * env.lit * dtH;
+    const solar = C.solarPanelW * (C.solarMul || 1) * env.lit * dtH;
     const room = capacity(s) - s.stored;
     s.solarWh += Math.min(room, solar);
     s.wastedWh = (s.wastedWh || 0) + Math.max(0, solar - room);
@@ -111,7 +131,7 @@ const Sim = (() => {
     // Live power flow for the HUD (watts = watt-hours per hour).
     if (dtH > 0) {
       const outW = (Object.values(s.used).reduce((a, b) => a + b, 0) - usedBefore) / dtH;
-      const inW = C.solarPanelW * env.lit;
+      const inW = C.solarPanelW * (C.solarMul || 1) * env.lit;
       const smooth = (old, v) => (old == null ? v : old + (v - old) * 0.15);
       s.flow = { inW, outW: smooth(s.flow && s.flow.outW, outW), full: s.stored >= capacity(s) - 0.5 };
     }
@@ -233,7 +253,7 @@ const Sim = (() => {
     return { state: s, needed: Math.round(needed), solar: Math.round(s.solarWh), capacity: capacity(create(terrain, loadout)), used: s.used, shadowH, endStored: Math.round(s.stored), stuck: s.stuck, reachable: terrain.trapReachable, routeMaxSlope: terrain.meta.gentlestRoute.maxSlopeDeg, ...evaluate(s) };
   }
 
-  return { create, capacity, tick, runScience, respond, repairing, end, evaluate, predict, facts, massKg, item, applyEngineering };
+  return { create, capacity, tick, runScience, respond, repairing, end, evaluate, predict, facts, massKg, item, applyEngineering, applyDifficulty, stars };
 })();
 
 if (typeof module !== "undefined") module.exports = Sim;
