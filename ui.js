@@ -91,6 +91,7 @@ const UI = (() => {
         <span><kbd>E</kbd> science at a site</span><span><kbd>M</kbd> map</span><span><kbd>H</kbd> headlights</span><span><kbd>C</kbd> camera</span>
       </div>
       <p class="muted small">Watch the battery: the Sun barely rises here, the shadow has no solar power, and something will go wrong.</p>
+      ${why("sound")}
       <button class="btn primary" data-act="pick">Choose a crater</button>`, "center wide");
     say("Read this first. Then pick where we're going.");
   }
@@ -246,13 +247,13 @@ const UI = (() => {
   function onEvent(name, data) {
     const map = {
       edge: () => say(C.say.edge, { slope: data, max: C.maxSlopeDeg }),
-      tooSteepUp: () => { say(C.say.tooSteepUp, { slope: data }); explain("slope"); },
-      tooSteepDown: () => { say(C.say.tooSteepDown, { slope: data }); explain("slope"); },
-      creep: () => { say(C.say.creep, { slope: data }); explain("slope"); },
+      tooSteepUp: () => { say(C.say.tooSteepUp, { slope: data }); explain("slope"); Sound.blip("warn"); },
+      tooSteepDown: () => { say(C.say.tooSteepDown, { slope: data }); explain("slope"); Sound.blip("warn"); },
+      creep: () => { say(C.say.creep, { slope: data }); explain("slope"); Sound.blip("warn"); },
       shadow: () => { say(C.say.shadow); explain("shadow"); },
-      signalLost: () => { say(C.say.signalLost); explain("signal"); },
-      signalBack: () => say(C.say.signalBack),
-      uplink: () => toast("Data uplinked to Earth"),
+      signalLost: () => { say(C.say.signalLost); explain("signal"); Sound.noSignal(true); },
+      signalBack: () => { say(C.say.signalBack); Sound.noSignal(false); },
+      uplink: () => { toast("Data uplinked to Earth"); Sound.blip("uplink"); },
       near: () => { if (data) { say(C.say.site); toast(`${data.label}: press E`); } },
       site: () => openSite(data),
       failure: () => openFailure(),
@@ -405,6 +406,7 @@ const UI = (() => {
     if (!events.includes("ran")) return closeSite();
     refreshMission();
     if (events.includes("ice")) say(C.say.ice); else if (events.includes("iceIR")) say(C.say.iceIR);
+    Sound.blip(events.includes("ice") || events.includes("iceIR") ? "ice" : "science");
 
     // Results: what ran, what it earned, and what it did for the requirements.
     const after = Sim.evaluate(sim), ran = sim.runs.filter((r) => r.site === site.id && ids.includes(r.id));
@@ -435,6 +437,7 @@ const UI = (() => {
 
   function openFailure() {
     World.setPaused(true);
+    Sound.blip("alarm");
     document.body.classList.add("alarm");
     setTimeout(() => document.body.classList.remove("alarm"), 1600);
     const opts = [`<button class="btn primary" data-act="respond" data-id="ration">${sim.backupCap ? "Route power through the backup" : "Ration power and carry on"}</button>`];
@@ -455,6 +458,7 @@ const UI = (() => {
     if (finish.lock) return;
     finish.lock = true;
     World.setPaused(true);
+    Sound.quiet();
     if (sim.stuck) say(C.say.stuck);
     setTimeout(() => { finish.lock = false; debrief(); }, sim.stuck ? 2200 : 300);
   }
@@ -571,6 +575,13 @@ const UI = (() => {
     toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
   }
 
+  function toggleSound() {
+    Sound.setEnabled(!Sound.isEnabled());
+    updateSoundButton();
+    toast(Sound.isEnabled() ? "Sound on" : "Sound off");
+  }
+  function updateSoundButton() { $("#btn-sound").textContent = `X · Sound ${Sound.isEnabled() ? "on" : "off"}`; }
+
   // ---------- wiring ----------
   function start() {
     World.init($("#world"));
@@ -630,7 +641,14 @@ const UI = (() => {
     window.addEventListener("keydown", (e) => {
       if (e.code === "KeyM" && !$("#hud").hidden) $("#bigmap").hidden ? openMap() : closeMap();
       if (e.code === "Escape") closeMap();
+      if (e.code === "KeyX" && !$("#hud").hidden) toggleSound();
     });
+    // Browsers only start audio after a click or key press; the demo recording stays silent.
+    const unlockAudio = () => { if (!C.demo) Sound.unlock(); };
+    window.addEventListener("pointerdown", unlockAudio);
+    window.addEventListener("keydown", unlockAudio);
+    $("#btn-sound").addEventListener("click", toggleSound);
+    updateSoundButton();
     $("#btn-lights").addEventListener("click", () => World.toggleLights());
     $("#btn-cam").addEventListener("click", () => World.toggleCamera());
     $("#btn-site").addEventListener("click", () => { const s = World.nearSite(); if (s) openSite(s); });

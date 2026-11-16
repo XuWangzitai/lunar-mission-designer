@@ -79,6 +79,7 @@ const CONFIG = {
     signal: { title: "Why did we lose contact?", text: "Radio needs a straight line to Earth. From the south pole, Earth hangs just above the horizon, so crater walls block it. Real missions plan for these blackouts or use relay satellites." },
     slope: { title: "Why can't the rover drive steeper?", text: "Loose lunar soil starts sliding at about 30–35° (its angle of repose; Shackleton's walls are close to that). Rovers are designed for much gentler slopes so they don't slip or tip over." },
     climb: { title: "Why is climbing out so expensive?", text: "Lifting the rover back up takes energy E = m·g·h. A 283 kg rover climbing 2.5 km in lunar gravity (1.62 m/s²) needs about 320 Wh at the wheels. With 50 % efficient motors, that's about 640 Wh from the battery." },
+    sound: { title: "Why can you hear anything on the Moon?", text: "Outside, you couldn't: sound needs air, and the Moon has almost none. What you hear is the rover's own motors and wheels, the way they shake its frame, plus radio hiss when Earth is out of view. The same lack of air makes wheel dust fly in clean arcs and fall straight back down instead of hanging in a cloud." },
     full: { title: "Why isn't the battery charging?", text: "It's already full. Sunlight beyond what the battery can store is simply wasted. A bigger battery, not more sunlight, is what lets you work longer in the dark." },
   },
 
