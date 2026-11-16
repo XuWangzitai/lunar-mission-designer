@@ -17,7 +17,11 @@ const UI = (() => {
   let difficulty = C.difficulties[store.get("lmd-difficulty", "normal")] ? store.get("lmd-difficulty", "normal") : "normal";
   const starStr = (n) => "★".repeat(n) + "☆".repeat(3 - n);
   const bestStars = (id, d) => ((store.get("lmd-stars", {})[id] || {})[d]) || 0;
+  // Best science per mission (or Sandbox crater) and difficulty, also saved per browser.
+  const bestKey = () => (mission ? `m:${mission.id}` : craterChoice && craterChoice !== "custom" ? `c:${craterChoice.id}` : null);
+  const bestScore = (key, d) => (key && (store.get("lmd-best", {})[key] || {})[d]) || null;
   const terrainCache = {};
+  let challenge = null; // the result that came with a shared link, if any
   let customParams = { name: "My crater", diameterKm: 30, depthKm: 2.5, wallSlopeDeg: 12, floorTempK: 50, icePct: 3 };
 
   // ---------- rover voice ----------
@@ -109,6 +113,7 @@ const UI = (() => {
   function missionsScreen() {
     $("#hud").hidden = true;
     mission = null;
+    challenge = null;
     setPanel(`
       <div class="eyebrow">STEP 1 · CHOOSE A MISSION</div>
       <h2>Five real craters, five missions</h2>
@@ -116,10 +121,10 @@ const UI = (() => {
       <p class="muted small">${C.difficulties[difficulty].label}: ${C.difficulties[difficulty].note}.</p>
       <div class="items">
         ${C.missions.map((m) => {
-          const c = CRATER_DATA.find((x) => x.id === m.crater), s = bestStars(m.id, difficulty);
+          const c = CRATER_DATA.find((x) => x.id === m.crater), s = bestStars(m.id, difficulty), b = bestScore(`m:${m.id}`, difficulty);
           return `<button class="card mission" data-act="mission" data-id="${m.id}">
             <div class="card-top"><b>${m.name}</b><span class="stars ${s ? "" : "none"}" title="Best: ${s} of 3 stars">${starStr(s)}</span></div>
-            <div class="card-stats">${c.name} · ${m.level} · science target ${m.target}</div>
+            <div class="card-stats">${c.name} · ${m.level} · science target ${m.target}${b ? ` · your best ${b.score}` : ""}</div>
             <div class="card-why">${m.story}</div></button>`;
         }).join("")}
         <button class="card" data-act="pick"><div class="card-top"><b>Sandbox</b><span class="chk">FREE PLAY</span></div>
@@ -226,8 +231,9 @@ const UI = (() => {
         <p class="small">${mission.story}</p>
         <p class="fine">★ all four requirements · ★★ also ${mission.target}+ science · ★★★ also 25 %+ battery left. Your best: ${starStr(bestStars(mission.id, difficulty))}</p>
       </div>` : "";
+    const shared = challenge ? `<div class="hint">Shared design: it returned <b>${challenge.score}</b> science${challenge.stars != null && mission ? ` (${starStr(challenge.stars)})` : ""} on ${C.difficulties[difficulty].label}. Fly it as it is, or change it and beat it.</div>` : "";
     setPanel(`
-      ${brief}
+      ${shared}${brief}
       <div class="eyebrow">STEP 2 · PACK THE ROVER · ${terrain.meta.name.toUpperCase()}</div>
       <div class="meter"><div class="meter-label"><span>MASS</span><b>${mass} / ${C.massLimit} kg</b></div>
         <div class="bar"><span style="width:${(mass / C.massLimit) * 100}%"></span></div></div>
@@ -257,8 +263,62 @@ const UI = (() => {
         <div><span>Battery fails in the shadow</span>${outcome(pf)}</div>
       </div>
       <p class="muted small">The forecast leaves out random events (dust, wheel slip, cold snaps, upload glitches), so keep some margin.</p>
-      <div class="btn-row"><button class="btn" data-act="${mission ? "missions" : "pick"}">Back</button><button class="btn primary" data-act="launch" ${loadout.length ? "" : "disabled"}>Land and drive</button></div>`);
+      ${bestKey() && bestScore(bestKey(), difficulty) ? `<p class="muted small">Your best here on ${C.difficulties[difficulty].label}: <b>${bestScore(bestKey(), difficulty).score}</b> science.</p>` : ""}
+      <div class="btn-row"><button class="btn" data-act="${mission ? "missions" : "pick"}">Back</button><button class="btn" data-act="share">Share design</button><button class="btn primary" data-act="launch" ${loadout.length ? "" : "disabled"}>Land and drive</button></div>
+      <input id="share-out" class="share-out" readonly hidden aria-label="Share link">`);
     say(C.say.loadout);
+  }
+
+  // ---------- share a design ----------
+  // The whole design (mission or crater, payload, engineering, difficulty) fits in the link's #hash,
+  // so sharing needs no server. From the report, the link also carries the result to beat.
+  function designCode(withResult) {
+    const d = {
+      v: 1, d: difficulty, s: C.maxSlopeDeg, l: loadout,
+      m: mission ? mission.id : undefined,
+      c: mission ? undefined : craterChoice === "custom" ? { ...customParams } : craterChoice.id,
+      e: Object.fromEntries(Object.entries(C.engineering).map(([k, e]) => [k, e.value])),
+    };
+    if (withResult && sim) { const r = Sim.evaluate(sim); d.r = { score: r.score, tier: r.tier, stars: mission ? Sim.stars(mission, sim).count : undefined }; }
+    return btoa(unescape(encodeURIComponent(JSON.stringify(d)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function shareLink(withResult) {
+    const url = `${location.origin}${location.pathname}#design=${designCode(withResult)}`;
+    const out = $("#share-out");
+    if (out) { out.value = url; out.hidden = false; out.select(); const p = $("#panel"); p.scrollTop = p.scrollHeight; }
+    const done = () => toast("Link copied. Send it to a friend.");
+    if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, () => toast("Copy the link below"));
+    else toast("Copy the link below");
+  }
+
+  // Read a shared design. Every value is checked and clamped, so a hand-edited link can't break the game.
+  function loadDesign(code) {
+    let d;
+    try { d = JSON.parse(decodeURIComponent(escape(atob(code.replace(/-/g, "+").replace(/_/g, "/"))))); } catch { return false; }
+    if (!d || typeof d !== "object") return false;
+    const num = (v, lo, hi, def) => (Number.isFinite(+v) ? Math.min(hi, Math.max(lo, +v)) : def);
+    if (C.difficulties[d.d]) { difficulty = d.d; Sim.applyDifficulty(difficulty); }
+    const slope = num(d.s, 8, 30, C.maxSlopeDeg);
+    if (slope !== C.maxSlopeDeg) { C.maxSlopeDeg = slope; Object.keys(terrainCache).forEach((k) => delete terrainCache[k]); }
+    Object.entries(C.engineering).forEach(([k, e]) => { if (d.e && d.e[k] != null) e.value = Math.round(num(d.e[k], e.min, e.max, e.value) / e.step) * e.step; });
+    mission = C.missions.find((m) => m.id === d.m) || null;
+    if (mission) craterChoice = CRATER_DATA.find((c) => c.id === mission.crater);
+    else if (d.c && typeof d.c === "object") {
+      const lim = { diameterKm: [5, 100], depthKm: [0.3, 6], wallSlopeDeg: [4, 35], floorTempK: [25, 150], icePct: [0, 10] };
+      Object.entries(lim).forEach(([k, [lo, hi]]) => { customParams[k] = num(d.c[k], lo, hi, customParams[k]); });
+      craterChoice = "custom";
+    } else craterChoice = CRATER_DATA.find((c) => c.id === d.c) || CRATER_DATA[0];
+    const ids = Array.isArray(d.l) ? [...new Set(d.l)].filter((id) => C.items.some((i) => i.id === id)) : [];
+    loadout = [];
+    for (const id of ids) if (loadout.reduce((m, i) => m + item(i).mass, 0) + item(id).mass <= C.massLimit) loadout.push(id);
+    if (!loadout.length) loadout = ["neutron", "drill", "backup"];
+    challenge = d.r && Number.isFinite(+d.r.score) ? { score: Math.round(+d.r.score), stars: Number.isFinite(+d.r.stars) ? Math.min(3, Math.max(0, Math.round(+d.r.stars))) : null } : null;
+    engOpen = true;
+    terrain = getTerrain(craterChoice);
+    loadoutScreen();
+    say(challenge ? `Someone sent us their rover. It brought home ${challenge.score} science. Let's beat that.` : "Someone sent us their rover design. Have a look, then fly it.");
+    return true;
   }
 
   // ---------- rover engineering ----------
@@ -556,6 +616,21 @@ const UI = (() => {
     const r = Sim.evaluate(sim), t = C.tiers[r.tier], u = sim.used;
     const total = Object.values(u).reduce((a, b) => a + b, 0);
     const row = (label, v, cls) => `<div class="stat-row"><span><i class="dot ${cls}"></i>${label}</span><b>${fmt(v)} Wh (${Math.round((v / total) * 100)}%)</b></div>`;
+    // Best science here on this difficulty, and how this run compares (and with the shared design, if any).
+    let bestLine = "";
+    const key = bestKey(), prevBest = bestScore(key, difficulty);
+    if (key) {
+      const batteryPct = Math.round((sim.stored / Sim.capacity(sim)) * 100);
+      if (!prevBest || r.score > prevBest.score) {
+        const all = store.get("lmd-best", {});
+        all[key] = { ...(all[key] || {}), [difficulty]: { score: r.score, batteryPct, loadout: [...loadout] } };
+        store.set("lmd-best", all);
+      }
+      bestLine = !prevBest ? "First run here: this is your best to beat."
+        : r.score > prevBest.score ? `New best science: ${r.score} (was ${prevBest.score}).`
+          : `Your best here: ${prevBest.score} science (${prevBest.loadout.map((id) => item(id).short).join(", ")}).`;
+    }
+    if (challenge) bestLine += ` ${r.score > challenge.score ? `You beat the shared design's ${challenge.score}!` : r.score === challenge.score ? `You tied the shared design's ${challenge.score}.` : `The shared design got ${challenge.score}; ${challenge.score - r.score} to go.`}`;
     let starsBlock = "";
     if (mission) {
       const st = Sim.stars(mission, sim), prev = bestStars(mission.id, difficulty);
@@ -579,6 +654,7 @@ const UI = (() => {
       <p class="lead">${sim.stuck ? `${C.roverName} ran out of power in the crater. ` : ""}${t.line}</p>
       ${starsBlock}
       <div class="scoreline"><span>Science returned<b>${r.score}</b></span>${r.lostPoints ? `<span class="bad">Never reached Earth: ${r.lostPoints}</span>` : ""}</div>
+      ${bestLine ? `<p class="muted small">${bestLine.trim()}</p>` : ""}
       <h3>Requirements check</h3>
       <div class="verify">${C.requirements.map((q) => `<div class="v ${r.met[q.id] ? "ok" : "no"}"><span class="mark">${r.met[q.id] ? "PASS" : "FAIL"}</span>
         <div><b>${q.id} ${q.title}</b><br><span class="muted">${r.why[q.id]}</span></div></div>`).join("")}</div>
@@ -594,7 +670,8 @@ const UI = (() => {
         ${sim.ev.log.map((e) => { const ev = C.events.list.find((x) => x.id === e.id), ch = e.choice && ev.choices.find((c) => c.id === e.choice);
           return `<li>Hour ${e.timeH.toFixed(1)}: ${ev.title.toLowerCase()}${ch ? `; you chose “${ch.label.toLowerCase()}”` : ""}.</li>`; }).join("")}
       </ul>
-      <div class="btn-row"><button class="btn primary" data-act="launch">Fly again</button><button class="btn" data-act="toLoadout">Change payload</button><button class="btn" data-act="${mission ? "missions" : "pick"}">${mission ? "Another mission" : "Another crater"}</button></div>`, "center wide");
+      <div class="btn-row"><button class="btn primary" data-act="launch">Fly again</button><button class="btn" data-act="toLoadout">Change payload</button><button class="btn" data-act="${mission ? "missions" : "pick"}">${mission ? "Another mission" : "Another crater"}</button><button class="btn" data-act="shareResult">Challenge a friend</button></div>
+      <input id="share-out" class="share-out" readonly hidden aria-label="Share link">`, "center wide");
   }
 
   // ---------- maps (minimap + full map share one renderer) ----------
@@ -707,11 +784,12 @@ const UI = (() => {
         mission: () => startMission(id),
         difficulty: () => setDifficulty(id),
         preset: () => { engOpen = true; Sim.applyEngineering(C.presets[id]); loadoutScreen(); },
-        pick: () => { mission = null; $("#loading").hidden = false; setTimeout(() => { pick(craterChoice === "custom" ? "custom" : craterChoice && craterChoice.id); $("#loading").hidden = true; }, 30); },
+        pick: () => { mission = null; challenge = null; $("#loading").hidden = false; setTimeout(() => { pick(craterChoice === "custom" ? "custom" : craterChoice && craterChoice.id); $("#loading").hidden = true; }, 30); },
         crater: () => selectCrater(id),
         toLoadout: loadoutScreen, toggle: () => toggle(id), launch,
         closeSite, runSite, siteDone,
         choose: () => chooseEvent(id),
+        share: () => shareLink(false), shareResult: () => shareLink(true),
         respond: () => { Sim.respond(sim, id); hidePanel(); World.setPaused(false); if (id === "repair") say("Swapping cells. Three hours."); },
       })[t.dataset.act]?.();
     });
@@ -768,7 +846,10 @@ const UI = (() => {
       const on = (e) => { e.preventDefault(); World.setTouch(k, true); }, off = () => World.setTouch(k, false);
       b.addEventListener("pointerdown", on); b.addEventListener("pointerup", off); b.addEventListener("pointerleave", off);
     });
-    title();
+    // Opened from a shared link? Go straight to that design; otherwise the title screen.
+    const m = !C.demo && location.hash.match(/^#design=([\w-]+)$/);
+    if (m) history.replaceState(null, "", location.pathname + location.search);
+    if (!(m && loadDesign(m[1]))) title();
   }
 
   return { start };
