@@ -38,8 +38,39 @@ const Sim = (() => {
     return { ...v, batteryKg, solarKg, baseMassKg: C.roverBaseMassKg };
   }
 
+  // Difficulty: how hard the battery fault hits, panel strength, and the random-event rate.
+  function applyDifficulty(id) {
+    const d = C.difficulties[id] || C.difficulties.normal;
+    C.difficulty = C.difficulties[id] ? id : "normal";
+    C.failure.mainFraction = d.failureMainFraction;
+    C.solarMul = d.solarMul;
+    C.eventRate = d.eventRate;
+    return d;
+  }
+
+  // Stars for a story mission: 1 = all four requirements, 2 = also the science target,
+  // 3 = also at least 25 % of the battery left at the end.
+  function stars(mission, s) {
+    const r = evaluate(s);
+    const full = r.tier === "full" && !s.stuck;
+    const target = full && r.score >= mission.target;
+    const margin = target && s.stored >= 0.25 * capacity(s);
+    return { count: full ? (target ? (margin ? 3 : 2) : 1) : 0, full, target, margin, score: r.score, batteryPct: Math.round((100 * s.stored) / capacity(s)) };
+  }
+
   function massKg(loadout) {
     return C.roverBaseMassKg + loadout.reduce((m, id) => m + item(id).mass, 0);
+  }
+
+  // Small seeded random generator (mulberry32), so a given seed always gives the same events.
+  function seeded(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
   }
 
   function create(terrain, loadout, opts = {}) {
@@ -49,14 +80,64 @@ const Sim = (() => {
       terrain, loadout: [...loadout], facts: f, massKg: massKg(loadout),
       mainCap: C.mainBatteryWh, backupCap: loadout.includes("backup") ? C.backupBatteryWh : 0,
       stored: 0, timeH: 0, distanceKm: 0, climbedM: 0, maxSlopeSeen: 0,
-      used: { drive: 0, climb: 0, systems: 0, heaters: 0, lights: 0, science: 0 }, solarWh: 0,
+      used: { drive: 0, climb: 0, systems: 0, heaters: 0, lights: 0, science: 0, events: 0 }, solarWh: 0,
       failureTrigger: opts.failureTrigger || (rng() < 0.5 ? "firstScience" : "shadow"),
       failed: false, failurePending: false, response: null, repairUntilH: null,
       runs: [], pending: [], uplinked: [], inShadow: false, everShadow: false, signal: true,
       stuck: false, done: false, endReason: null,
+      // Random events: off unless asked for (the forecast and most tests leave them out).
+      ev: { on: !!opts.events, rng: seeded(opts.seed != null ? opts.seed : Math.floor(Math.random() * 2 ** 32)), count: 0, lastH: -99, log: [] },
+      eventPending: null,
+      mods: { solar: { mul: 1, untilH: 0 }, heat: { mul: 1, untilH: 0 }, uplinkBlockedUntilH: 0 },
     };
     s.stored = capacity(s);
     return s;
+  }
+
+  // ---------- random events ----------
+  const eventDef = (id) => C.events.list.find((e) => e.id === id);
+
+  function canHaveEvent(s) {
+    return s.ev.on && !s.eventPending && !s.failurePending && !s.done
+      && s.ev.count < C.events.maxPerMission && s.timeH - s.ev.lastH >= C.events.minGapH;
+  }
+
+  // Each kind of event happens at most once per mission.
+  const hadEvent = (s, id) => s.ev.log.some((l) => l.id === id);
+
+  function trigger(s, ev) {
+    s.ev.count++;
+    s.ev.lastH = s.timeH;
+    s.ev.log.push({ id: ev.id, timeH: s.timeH, choice: null });
+    if (ev.choices) { s.eventPending = ev; return "event"; }
+    if (ev.id === "slip") drain(s, ev.cost, "events");
+    if (ev.id === "cold") s.mods.heat = { mul: 1.5, untilH: s.timeH + 3 };
+    return "eventInfo";
+  }
+
+  // Roll for a driving event this tick. Chance grows with time; difficulty scales it.
+  function rollEvent(s, dtH, dist, env) {
+    if (!canHaveEvent(s)) return null;
+    const p = 1 - Math.exp(-C.events.perHour * (C.eventRate || 1) * dtH);
+    if (s.ev.rng() >= p) return null;
+    const ok = C.events.list.filter((e) => !hadEvent(s, e.id) && (
+      e.when === "sun" ? env.lit > 0 && dist > 0
+        : e.when === "slope" ? dist > 0 && Math.abs(env.slopeDeg || 0) > 6
+          : e.when === "shadow" ? env.shadow : false));
+    if (!ok.length) return null;
+    return trigger(s, ok[Math.floor(s.ev.rng() * ok.length)]);
+  }
+
+  // The player's answer to an event with choices.
+  function chooseEvent(s, choiceId) {
+    const ev = s.eventPending;
+    if (!ev) return;
+    const choice = ev.choices.find((c) => c.id === choiceId) || ev.choices[ev.choices.length - 1];
+    s.eventPending = null;
+    s.ev.log[s.ev.log.length - 1].choice = choice.id;
+    if (choice.cost) drain(s, choice.cost, "events");
+    if (ev.id === "dust" && choice.id === "ignore") s.mods.solar = { mul: 0.6, untilH: s.timeH + 8 };
+    if (ev.id === "glitch" && choice.id === "later") s.mods.uplinkBlockedUntilH = s.timeH + 2;
   }
 
   const capacity = (s) => s.mainCap + s.backupCap;
@@ -86,7 +167,7 @@ const Sim = (() => {
   // One frame of movement. dist and climb in meters, dtH in mission hours.
   // env: { lit (0..1), shadow (bool), signal (bool), lights (bool), slopeDeg }
   function tick(s, dtH, dist, climb, env) {
-    if (s.done || s.failurePending) return [];
+    if (s.done || s.failurePending || s.eventPending) return [];
     const events = [];
     const usedBefore = Object.values(s.used).reduce((a, b) => a + b, 0);
     s.timeH += dtH;
@@ -99,10 +180,12 @@ const Sim = (() => {
     if (climb > 0) { s.climbedM += climb; drain(s, (m * g * climb) / eta / 3600, "climb"); }
 
     drain(s, C.systemsW * dtH, "systems");
-    if (env.shadow) drain(s, C.heaterW(s.facts.floorTempK) * dtH, "heaters");
+    const heatMul = s.timeH < s.mods.heat.untilH ? s.mods.heat.mul : 1;
+    if (env.shadow) drain(s, C.heaterW(s.facts.floorTempK) * heatMul * dtH, "heaters");
     if (env.lights) drain(s, C.headlightsW * dtH, "lights");
 
-    const solar = C.solarPanelW * env.lit * dtH;
+    const panelMul = (C.solarMul || 1) * (s.timeH < s.mods.solar.untilH ? s.mods.solar.mul : 1);
+    const solar = C.solarPanelW * panelMul * env.lit * dtH;
     const room = capacity(s) - s.stored;
     s.solarWh += Math.min(room, solar);
     s.wastedWh = (s.wastedWh || 0) + Math.max(0, solar - room);
@@ -111,7 +194,7 @@ const Sim = (() => {
     // Live power flow for the HUD (watts = watt-hours per hour).
     if (dtH > 0) {
       const outW = (Object.values(s.used).reduce((a, b) => a + b, 0) - usedBefore) / dtH;
-      const inW = C.solarPanelW * env.lit;
+      const inW = C.solarPanelW * panelMul * env.lit;
       const smooth = (old, v) => (old == null ? v : old + (v - old) * 0.15);
       s.flow = { inW, outW: smooth(s.flow && s.flow.outW, outW), full: s.stored >= capacity(s) - 0.5 };
     }
@@ -122,7 +205,12 @@ const Sim = (() => {
     if (env.shadow && env.deep !== false && s.failureTrigger === "shadow" && !s.failed) { fail(s); events.push("failure"); }
     if (env.shadow !== s.inShadow) s.inShadow = env.shadow;
     if (env.signal !== s.signal) { s.signal = env.signal; events.push(env.signal ? "signalBack" : "signalLost"); }
-    if (s.signal && s.pending.length) { s.uplinked.push(...s.pending); s.pending = []; events.push("uplink"); }
+    if (s.signal && s.pending.length && s.timeH >= s.mods.uplinkBlockedUntilH) {
+      // Sometimes the first try at sending fails (an event with a choice).
+      if (canHaveEvent(s) && !hadEvent(s, "glitch") && s.ev.rng() < C.events.glitchChance * (C.eventRate || 1)) events.push(trigger(s, eventDef("glitch")));
+      else { s.uplinked.push(...s.pending); s.pending = []; events.push("uplink"); }
+    }
+    if (!s.done) { const e = rollEvent(s, dtH, dist, env); if (e) events.push(e); }
     if (repairing(s) === false && s.repairUntilH != null && s.response === "repair") {
       s.mainCap = Math.round(C.mainBatteryWh * C.repair.mainFraction); s.repairUntilH = null; events.push("repaired");
     }
@@ -186,10 +274,11 @@ const Sim = (() => {
 
   // Forecast along the beacon route and back, without driving.
   function predict(terrain, loadout, opts = {}) {
-    const s = create(terrain, loadout, { failureTrigger: opts.failure || "none" });
+    const s = create(terrain, loadout, { failureTrigger: opts.failure || "none", events: !!opts.events, seed: opts.seed });
     // opts.response and opts.plan let the tests try other choices than the default ones.
     let env = { lit: 1, shadow: false, signal: true, lights: false, slopeDeg: 0 };
     const respondIfNeeded = () => {
+      if (s.eventPending) chooseEvent(s, opts.eventChoice === "last" ? s.eventPending.choices[s.eventPending.choices.length - 1].id : s.eventPending.choices[0].id);
       if (!s.failurePending) return;
       const repair = opts.response === "repair" && loadout.includes("kit");
       respond(s, repair ? "repair" : "ration");
@@ -215,7 +304,7 @@ const Sim = (() => {
         const dtH = d / 1000 / kmh;
         if (shadow) shadowH += dtH;
         const deep = T_.heightAt(terrain, x1, y1) < -200 * terrain.meta.depthKm; // more than 20 % of the way down
-        env = { lit, shadow, deep, signal: T_.signalAt(terrain, x1, y1), lights: shadow, slopeDeg: 0 };
+        env = { lit, shadow, deep, signal: T_.signalAt(terrain, x1, y1), lights: shadow, slopeDeg: (Math.atan2(dh, d) * 180) / Math.PI };
         tick(s, dtH, d, dh, env);
         respondIfNeeded();
       }
@@ -233,7 +322,7 @@ const Sim = (() => {
     return { state: s, needed: Math.round(needed), solar: Math.round(s.solarWh), capacity: capacity(create(terrain, loadout)), used: s.used, shadowH, endStored: Math.round(s.stored), stuck: s.stuck, reachable: terrain.trapReachable, routeMaxSlope: terrain.meta.gentlestRoute.maxSlopeDeg, ...evaluate(s) };
   }
 
-  return { create, capacity, tick, runScience, respond, repairing, end, evaluate, predict, facts, massKg, item, applyEngineering };
+  return { create, capacity, tick, runScience, respond, repairing, end, evaluate, predict, facts, massKg, item, applyEngineering, applyDifficulty, stars, chooseEvent };
 })();
 
 if (typeof module !== "undefined") module.exports = Sim;

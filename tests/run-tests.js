@@ -138,6 +138,90 @@ for (const c of CRATERS) {
   check("the fault fires once the rover is deep in the crater's shadow", s.failed && s.failurePending);
 }
 
+// Difficulty and story missions.
+{
+  const d = Sim.applyDifficulty("normal");
+  check("Normal difficulty keeps the designed balance", CONFIG.failure.mainFraction === 0.4 && (CONFIG.solarMul || 1) === 1 && d.label === "Normal");
+  check("unknown difficulty falls back to Normal", Sim.applyDifficulty("nightmare") && CONFIG.difficulty === "normal");
+  const T = TERR.haworth, worse = {};
+  for (const id of ["easy", "normal", "hard"]) { Sim.applyDifficulty(id); worse[id] = Sim.predict(T, ["neutron", "drill", "backup"], { failure: "shadow" }).endStored; }
+  check("battery left after a fault: Easy > Normal > Hard", worse.easy > worse.normal && worse.normal > worse.hard, JSON.stringify(worse));
+  Sim.applyDifficulty("normal");
+  const good = { chassisKg: 170, batteryWh: 8000, solarW: 300, efficiency: 60, speedKmh: 4 };
+  for (const m of CONFIG.missions) {
+    const MT = TERR[m.crater];
+    check(`${m.name}: crater exists and the cold trap is reachable`, !!MT && MT.trapReachable);
+    Sim.applyEngineering(CONFIG.presets.standard);
+    const safe = Sim.stars(m, Sim.predict(MT, ["neutron", "drill", "backup"], { failure: "shadow" }).state).count;
+    Sim.applyEngineering(good);
+    const smart = Sim.stars(m, Sim.predict(MT, ["neutron", "ir", "drill"], { failure: "shadow" }).state).count;
+    const smartOk = Sim.stars(m, Sim.predict(MT, ["neutron", "ir", "drill"], { failure: "none" }).state).count;
+    check(`${m.name}: safe payload still earns a star after a fault (${safe}★)`, safe >= 1);
+    check(`${m.name}: a well-engineered max-science rover earns 3★ without a fault and ≥2★ with one (${smartOk}★/${smart}★)`, smartOk === 3 && smart >= 2);
+  }
+  Sim.applyEngineering(CONFIG.presets.standard);
+  const s0 = Sim.create(TERR.faustini, ["neutron"], { failureTrigger: "none" });
+  check("no science means no stars", Sim.stars(CONFIG.missions[0], s0).count === 0);
+}
+
+// Random events.
+{
+  const T = TERR.haworth, env = { lit: 1, shadow: false, signal: true, lights: false, slopeDeg: 0 };
+  // Off by default: forecasts and the older tests never see events.
+  const off = Sim.predict(T, ["neutron", "drill", "backup"], { seed: 1 });
+  check("events are off unless asked for", off.state.ev.count === 0);
+  // Same seed, same events.
+  const a = Sim.predict(T, ["neutron", "drill", "backup"], { events: true, seed: 42 }), b = Sim.predict(T, ["neutron", "drill", "backup"], { events: true, seed: 42 });
+  check("a seed always gives the same events", JSON.stringify(a.state.ev.log) === JSON.stringify(b.state.ev.log));
+  // Dust: shaking costs energy; ignoring weakens the panels for 8 hours.
+  const s1 = Sim.create(T, ["neutron"], { failureTrigger: "none", events: true, seed: 1 });
+  s1.eventPending = CONFIG.events.list.find((e) => e.id === "dust"); s1.ev.log.push({ id: "dust" });
+  const before = s1.stored - 500; s1.stored = before;
+  Sim.chooseEvent(s1, "shake");
+  check("dust: shaking costs 120 Wh", Math.abs(before - s1.stored - 120) < 1e-6 && !s1.eventPending);
+  const s2 = Sim.create(T, ["neutron"], { failureTrigger: "none", events: true, seed: 1 });
+  s2.eventPending = CONFIG.events.list.find((e) => e.id === "dust"); s2.ev.log.push({ id: "dust" });
+  Sim.chooseEvent(s2, "ignore"); s2.stored = 1000; s2.ev.on = false;
+  Sim.tick(s2, 1, 0, 0, env);
+  check("dust: ignoring it leaves the panels at 60 %", Math.abs(s2.flow.inW - CONFIG.solarPanelW * 0.6) < 1e-6);
+  // Glitch: 'later' holds the data back 2 hours.
+  const s3 = Sim.create(T, ["neutron", "drill"], { failureTrigger: "none", events: true, seed: 1 });
+  s3.ev.on = false; Sim.tick(s3, 0.1, 0, 0, { ...env, signal: false }); Sim.runScience(s3, T.sites[2], ["drill"]);
+  s3.eventPending = CONFIG.events.list.find((e) => e.id === "glitch"); s3.ev.log.push({ id: "glitch" });
+  Sim.chooseEvent(s3, "later");
+  Sim.tick(s3, 1, 0, 0, env);
+  check("glitch: 'retry later' keeps the data waiting", s3.pending.length === 1 && !Sim.evaluate(s3).met.R4);
+  Sim.tick(s3, 1.2, 0, 0, env);
+  check("glitch: after 2 hours it uploads", s3.pending.length === 0 && Sim.evaluate(s3).met.R4);
+  // While an event waits for an answer, time stops.
+  const s4 = Sim.create(T, ["neutron"], { failureTrigger: "none" });
+  s4.eventPending = CONFIG.events.list.find((e) => e.id === "dust");
+  check("nothing happens while an event waits for an answer", Sim.tick(s4, 1, 100, 0, env).length === 0 && s4.timeH === 0);
+  // Sweep: events on, every payload that fits, many seeds, both choices, faults on.
+  const ids = CONFIG.items.map((i) => i.id), loads = [];
+  for (let m = 0; m < 1 << ids.length; m++) { const L = ids.filter((_, i) => m & (1 << i)); if (L.reduce((k, id) => k + Sim.item(id).mass, 0) <= CONFIG.massLimit) loads.push(L); }
+  let bad = 0, seen = {}, first = "", total = 0;
+  for (const diff of ["easy", "normal", "hard"]) {
+    Sim.applyDifficulty(diff);
+    for (const L of loads) for (let seed = 1; seed <= 6; seed++) for (const choice of ["first", "last"]) {
+      total++;
+      const p = Sim.predict(TERR.cabeus, L, { events: true, seed: seed * 7919 + L.length, eventChoice: choice, failure: seed % 2 ? "shadow" : "none" }), s = p.state;
+      s.ev.log.forEach((e) => { seen[e.id] = (seen[e.id] || 0) + 1; });
+      const probs = [];
+      if (s.eventPending) probs.push("event left unanswered");
+      if (s.ev.count > CONFIG.events.maxPerMission) probs.push("too many events");
+      if (new Set(s.ev.log.map((e) => e.id)).size !== s.ev.log.length) probs.push("same event twice");
+      if (!(s.stored >= 0 && s.stored <= Sim.capacity(s) + 1e-6)) probs.push("battery out of range");
+      if (s.uplinked.length + s.pending.length !== s.runs.length) probs.push("results lost");
+      if (probs.length) { bad++; first = first || `${diff} [${L}] seed ${seed} ${choice}: ${probs}`; }
+    }
+  }
+  Sim.applyDifficulty("normal");
+  console.log(`\nEvent sweep: ${total} missions; events seen: ${JSON.stringify(seen)}`);
+  check("every kind of event happens somewhere in the sweep", ["dust", "slip", "cold", "glitch"].every((k) => seen[k] > 0));
+  check("events never break the rules", bad === 0, first);
+}
+
 // Rover engineering: defaults reproduce the standard rover; limits can't be broken.
 const std = Sim.applyEngineering({});
 check("standard rover is 250 kg", std.baseMassKg === 250, `got ${std.baseMassKg}`);

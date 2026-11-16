@@ -10,13 +10,17 @@ Pick a **real crater** at the Moon's south pole, pack a robotic rover within a 3
 The central trade-off: **pack a backup battery, or use that mass for another science instrument?** In v2 the backup is also your energy reserve for the climb out, and the climb costs E = m·g·h ÷ η.
 
 ## How to play
-1. **Choose a crater**: Shackleton, de Gerlache, Faustini, Haworth, Shoemaker or Cabeus, each with real measurements. Or build a **custom crater** from your own numbers. You can also set the rover's maximum safe slope.
+1. **Choose a mission** (five story missions, each on a real crater with a real reason to go there) on **Easy, Normal or Hard**, or use **Sandbox** to pick any of Shackleton, de Gerlache, Faustini, Haworth, Shoemaker or Cabeus, or build a **custom crater** from your own numbers. You can also set the rover's maximum safe slope. Missions award up to 3 stars: all four requirements met, the mission's science target reached, and at least 25 % of the battery left.
 2. **Pack the rover** and read the **mission forecast**: rolling, climbing, heater and science energy along the drivable route, with and without a battery failure. Open **Rover engineering** to change the chassis mass, battery, solar array, motor efficiency and speed. The limits keep it buildable: batteries cost ~1 kg per 200 Wh and solar arrays ~1 kg per 75 W, so more energy always means more mass to haul up the crater wall.
 3. **Drive**: W/S or ↑/↓ to drive, A/D or ←/→ to steer, **E** to run science at a site, **H** for headlights, **C** to switch camera. On touch screens, use the on-screen arrows.
 4. Follow the beacons (a slope-safe path found over the real terrain). THOX, the rover, warns you at the crater edge. Too-steep ground stops the rover.
 5. The battery fails at a random moment: entering the shadow or during the first science run.
-6. Data taken in the crater waits until Earth is back in view, so you have to climb out.
-7. **Debrief** checks each requirement and shows where every watt-hour went.
+6. **Random events** grounded in real lunar problems can hit too: dust on the solar panels, wheel slip on a slope, a cold snap in the shadow, a garbled upload. Some ask you to choose (spend energy now, or live with the consequence).
+7. Data taken in the crater waits until Earth is back in view, so you have to climb out.
+8. **Debrief** checks each requirement, shows where every watt-hour went, lists the events and your choices, and compares the run with your best score.
+9. **Share design** (packing screen) or **Challenge a friend** (report) makes a link that rebuilds your exact rover, and the score to beat, on someone else's screen. Nothing is sent to a server: it is all in the link.
+
+The world has boulders, small craters, wheel tracks, dust, a lit Earth in the sky and synthesized sound (X toggles it).
 
 ## Real NASA data and how it's used
 | Data | Source | Used for |

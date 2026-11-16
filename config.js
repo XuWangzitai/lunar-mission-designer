@@ -63,6 +63,62 @@ const CONFIG = {
   ],
   massLimit: 35,
 
+  // Difficulty changes how hard the battery fault hits, how strong the Sun is, and how often
+  // random events happen. Normal is the balance all the tests and forecasts were built on.
+  difficulties: {
+    easy: { label: "Easy", note: "Milder battery fault, stronger panels, fewer surprises", failureMainFraction: 0.6, solarMul: 1.25, eventRate: 0.5 },
+    normal: { label: "Normal", note: "The mission as designed", failureMainFraction: 0.4, solarMul: 1, eventRate: 1 },
+    hard: { label: "Hard", note: "Severe battery fault, weaker panels, more surprises", failureMainFraction: 0.25, solarMul: 0.8, eventRate: 1.6 },
+  },
+
+  // Random events during a mission. Chances and costs are game values; the problems are real ones
+  // (lunar dust clings to hardware, wheels sink in soft regolith, links drop packets).
+  events: {
+    perHour: 0.12,        // chance per mission hour at Normal, scaled by the difficulty's eventRate
+    glitchChance: 0.3,    // chance a data upload fails the first time (also scaled)
+    maxPerMission: 3,
+    minGapH: 2,
+    list: [
+      { id: "dust", when: "sun", title: "Dust on the solar panels",
+        text: "Fine dust thrown up by the wheels has stuck to the panels. Solar output is down 40 %.",
+        choices: [
+          { id: "shake", label: "Shake the panels clean", cost: 120, note: "−120 Wh now" },
+          { id: "ignore", label: "Leave it", note: "panels at 60 % for 8 hours" },
+        ] },
+      { id: "slip", when: "slope", cost: 90, title: "Wheel slip",
+        text: "A wheel sank into soft regolith on the slope. Rocking free cost 90 Wh." },
+      { id: "cold", when: "shadow", title: "Cold snap",
+        text: "The ground here is colder than the forecast. Heaters will draw 50 % more for the next 3 hours." },
+      { id: "glitch", when: "uplink", title: "Upload failed",
+        text: "Earth came back into view, but the first upload was garbled and didn't arrive.",
+        choices: [
+          { id: "resend", label: "Resend now", cost: 60, note: "−60 Wh, data goes home now" },
+          { id: "later", label: "Let it retry by itself", note: "data waits 2 more hours" },
+        ] },
+    ],
+  },
+
+  // Story missions. Facts in `story` are real (sources in README); the scoring targets are game values.
+  // Stars: 1 = all four requirements met; 2 = also return at least `target` science;
+  // 3 = also finish with at least 25 % of the battery left.
+  missions: [
+    { id: "first-light", name: "First Light", crater: "faustini", level: "Start here",
+      story: "Faustini has the shortest safe route of the six into permanent shadow, about 11 km. A good first mission: learn the controls, find the cold trap, and get the data home.",
+      target: 80 },
+    { id: "lcross", name: "Return to LCROSS", crater: "cabeus", level: "Long drive",
+      story: "In 2009 NASA crashed the spent LCROSS rocket stage into Cabeus and measured about 5.6 % water ice in the debris. Drive in and confirm it from the ground. The route is the longest of the six, so energy is tight.",
+      target: 140 },
+    { id: "artemis-scout", name: "Artemis Scout", crater: "haworth", level: "Medium",
+      story: "Haworth is one of NASA's candidate landing regions for Artemis III, the first crewed landing near the south pole. Scout its nearest cold trap so a future crew knows where the ice is.",
+      target: 100 },
+    { id: "biggest-shadow", name: "Biggest Shadow", crater: "shoemaker", level: "Medium",
+      story: "Shoemaker's floor is the largest permanently shadowed area of the six craters here, about 1,080 km² that sunlight never touches. Plan your heaters: you'll spend a long time in the cold.",
+      target: 100 },
+    { id: "the-pole", name: "The Pole Itself", crater: "shackleton", level: "Hardest",
+      story: "Shackleton sits almost exactly on the lunar south pole. Its walls average about 30°, close to the steepest that loose soil can hold. The only safe way into its shadow is a 25 km switchback.",
+      target: 100 },
+  ],
+
   requirements: [
     { id: "R1", title: "Hydrogen survey", text: "Run the Neutron Spectrometer at 2 different sites.", why: "Hydrogen is a clue to water. Measuring at two places shows how it changes toward the crater." },
     { id: "R2", title: "Ice detected", text: "Run the IR Spectrometer or Drill at the cold trap.", why: "The cold trap is where ice can survive, so that's where you look." },
@@ -79,6 +135,7 @@ const CONFIG = {
     signal: { title: "Why did we lose contact?", text: "Radio needs a straight line to Earth. From the south pole, Earth hangs just above the horizon, so crater walls block it. Real missions plan for these blackouts or use relay satellites." },
     slope: { title: "Why can't the rover drive steeper?", text: "Loose lunar soil starts sliding at about 30–35° (its angle of repose; Shackleton's walls are close to that). Rovers are designed for much gentler slopes so they don't slip or tip over." },
     climb: { title: "Why is climbing out so expensive?", text: "Lifting the rover back up takes energy E = m·g·h. A 283 kg rover climbing 2.5 km in lunar gravity (1.62 m/s²) needs about 320 Wh at the wheels. With 50 % efficient motors, that's about 640 Wh from the battery." },
+    sound: { title: "Why can you hear anything on the Moon?", text: "Outside, you couldn't: sound needs air, and the Moon has almost none. What you hear is the rover's own motors and wheels, the way they shake its frame, plus radio hiss when Earth is out of view. The same lack of air makes wheel dust fly in clean arcs and fall straight back down instead of hanging in a cloud." },
     full: { title: "Why isn't the battery charging?", text: "It's already full. Sunlight beyond what the battery can store is simply wasted. A bigger battery, not more sunlight, is what lets you work longer in the dark." },
   },
 

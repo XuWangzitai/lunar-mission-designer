@@ -52,8 +52,9 @@ kbd { font-family: var(--font); font-size: 11px; font-weight: 600; padding: 1px 
 .btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .btn.ghost { margin: 0; padding: 8px 10px; font-size: 11px; border-color: var(--line); }
 .btn.small { margin: 0; padding: 9px 8px; font-size: 10px; background: var(--panel); }
-.btn-row { display: flex; gap: 10px; }
-.btn-row .btn { flex: 1; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn-row .btn { flex: 1 1 140px; }
+.share-out { width: 100%; margin-top: 10px; padding: 8px 10px; background: transparent; border: 1px solid var(--line-strong); color: inherit; font: 12px ui-monospace, monospace; }
 
 /* ---------- panels ---------- */
 .panel { position: absolute; z-index: 2; background: var(--panel); border: 1px solid var(--line); padding: 28px 30px; overflow-y: auto;
@@ -319,3 +320,15 @@ body.alarm #app::after { content: ""; position: absolute; inset: 0; pointer-even
   .touchpad button { width: 44px; height: 44px; }
   .hud:not([hidden]) ~ .lumi { left: 170px; right: auto; max-width: calc(100% - 360px); }
 }
+
+/* missions, difficulty, stars */
+.diff { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 8px; }
+.btn.ghost.on { background: var(--fg); color: #000; border-color: var(--fg); }
+.stars { color: var(--warn); letter-spacing: 0.12em; font-size: 15px; white-space: nowrap; }
+.stars.none { color: var(--faint); }
+.small-stars { display: block; font-size: 13px; margin-top: 2px; }
+.stars-big { color: var(--warn); font-size: 34px; letter-spacing: 0.18em; margin: 4px 0 2px; }
+.mission-brief { border-left: 2px solid var(--warn); padding: 4px 0 4px 14px; margin-bottom: 18px; }
+.mission-brief .eyebrow { color: var(--warn); }
+.mission-brief p { margin: 6px 0 0; }
+.verify .v .mark { min-width: 38px; }

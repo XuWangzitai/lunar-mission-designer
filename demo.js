@@ -2,10 +2,11 @@
 // video can be recorded in a single take. It drives the real game through its own
 // buttons; only the battery-fault timing and a time-lapse speed are fixed.
 
-/* global CONFIG, World */
+/* global CONFIG, World, Sim */
 const C = CONFIG;
 C.demo = true;
 C.forceFailure = "shadow";
+Sim.applyDifficulty("normal"); // the video always shows the mission as designed
 
 const SPEED = 5;              // time-lapse while driving
 const CRATER = "faustini";    // shortest route of the six
@@ -112,6 +113,7 @@ async function play() {
 
   // 2. Crater picker.
   await click("[data-act=briefing]");
+  await click("[data-act=missions]");
   await click("[data-act=pick]");
   await until(() => $(`[data-act=crater][data-id=${CRATER}]`));
   caption("Six real south-pole craters, measured from LOLA");

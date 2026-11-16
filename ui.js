@@ -7,7 +7,21 @@ const UI = (() => {
   const fmt = (n) => Math.round(n).toLocaleString("en-US");
 
   let craterChoice = null, terrain = null, loadout = ["neutron", "drill", "backup"], sim = null;
+  let mission = null; // a story mission from CONFIG.missions, or null in Sandbox
+
+  // Saved per browser: chosen difficulty and best stars per mission and difficulty.
+  const store = {
+    get(key, fallback) { try { const v = localStorage.getItem(key); return v == null ? fallback : JSON.parse(v); } catch { return fallback; } },
+    set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage blocked: progress just isn't kept */ } },
+  };
+  let difficulty = C.difficulties[store.get("lmd-difficulty", "normal")] ? store.get("lmd-difficulty", "normal") : "normal";
+  const starStr = (n) => "★".repeat(n) + "☆".repeat(3 - n);
+  const bestStars = (id, d) => ((store.get("lmd-stars", {})[id] || {})[d]) || 0;
+  // Best science per mission (or Sandbox crater) and difficulty, also saved per browser.
+  const bestKey = () => (mission ? `m:${mission.id}` : craterChoice && craterChoice !== "custom" ? `c:${craterChoice.id}` : null);
+  const bestScore = (key, d) => (key && (store.get("lmd-best", {})[key] || {})[d]) || null;
   const terrainCache = {};
+  let challenge = null; // the result that came with a shared link, if any
   let customParams = { name: "My crater", diameterKm: 30, depthKm: 2.5, wallSlopeDeg: 12, floorTempK: 50, icePct: 3 };
 
   // ---------- rover voice ----------
@@ -79,7 +93,7 @@ const UI = (() => {
       <div class="reqs">${C.requirements.map((r) => `<div class="req"><span class="req-id">${r.id}</span><div><b>${r.title}</b>: ${r.text}<br><span class="muted small">${r.why}</span></div></div>`).join("")}</div>
       <h3>How a mission goes</h3>
       <ol class="steps">
-        <li><b>Choose a crater</b>, a real one measured by NASA, or build your own.</li>
+        <li><b>Choose a mission</b> on a real crater measured by NASA, or use <b>Sandbox</b> to pick any crater or build your own.</li>
         <li><b>Pack the rover</b> within 35 kg and check the energy forecast.</li>
         <li><b>Survey the rim</b> (amber pillar near the landing site): drive into the ring and press <kbd>E</kbd>.</li>
         <li><b>Follow the blue beacons</b> down the safe route to the wall site and the <b>cold trap</b> (blue pillar).</li>
@@ -91,8 +105,47 @@ const UI = (() => {
         <span><kbd>E</kbd> science at a site</span><span><kbd>M</kbd> map</span><span><kbd>H</kbd> headlights</span><span><kbd>C</kbd> camera</span>
       </div>
       <p class="muted small">Watch the battery: the Sun barely rises here, the shadow has no solar power, and something will go wrong.</p>
-      <button class="btn primary" data-act="pick">Choose a crater</button>`, "center wide");
+      ${why("sound")}
+      <button class="btn primary" data-act="missions">Choose a mission</button>`, "center wide");
     say("Read this first. Then pick where we're going.");
+  }
+
+  function missionsScreen() {
+    $("#hud").hidden = true;
+    mission = null;
+    challenge = null;
+    setPanel(`
+      <div class="eyebrow">STEP 1 · CHOOSE A MISSION</div>
+      <h2>Five real craters, five missions</h2>
+      <div class="diff">${Object.entries(C.difficulties).map(([id, d]) => `<button class="btn ghost ${id === difficulty ? "on" : ""}" data-act="difficulty" data-id="${id}">${d.label}</button>`).join("")}</div>
+      <p class="muted small">${C.difficulties[difficulty].label}: ${C.difficulties[difficulty].note}.</p>
+      <div class="items">
+        ${C.missions.map((m) => {
+          const c = CRATER_DATA.find((x) => x.id === m.crater), s = bestStars(m.id, difficulty), b = bestScore(`m:${m.id}`, difficulty);
+          return `<button class="card mission" data-act="mission" data-id="${m.id}">
+            <div class="card-top"><b>${m.name}</b><span class="stars ${s ? "" : "none"}" title="Best: ${s} of 3 stars">${starStr(s)}</span></div>
+            <div class="card-stats">${c.name} · ${m.level} · science target ${m.target}${b ? ` · your best ${b.score}` : ""}</div>
+            <div class="card-why">${m.story}</div></button>`;
+        }).join("")}
+        <button class="card" data-act="pick"><div class="card-top"><b>Sandbox</b><span class="chk">FREE PLAY</span></div>
+          <div class="card-why">Any of the six craters, or a crater you build from your own numbers. No stars, just experiments.</div></button>
+      </div>
+      <p class="fine">★ all four requirements met · ★★ also reach the science target · ★★★ also finish with at least 25 % of the battery left. Best stars are saved in this browser.</p>`);
+    say("Pick a mission. Each one is a real crater with a real reason to go there.");
+  }
+
+  function startMission(id) {
+    mission = C.missions.find((m) => m.id === id);
+    craterChoice = CRATER_DATA.find((c) => c.id === mission.crater);
+    $("#loading").hidden = false;
+    setTimeout(() => { terrain = getTerrain(craterChoice); $("#loading").hidden = true; loadoutScreen(); }, 30);
+  }
+
+  function setDifficulty(id) {
+    difficulty = id;
+    store.set("lmd-difficulty", id);
+    Sim.applyDifficulty(id);
+    missionsScreen();
   }
 
   function pick(selectedId) {
@@ -171,8 +224,16 @@ const UI = (() => {
     const r = reach(terrain);
     const u = p.used;
     const bar = (v, cls) => `<span class="seg ${cls}" style="width:${Math.min(100, (v / p.capacity) * 100)}%"></span>`;
-    const outcome = (q) => q.stuck ? `<b class="bad">Stranded</b>` : `<b class="tier-${q.tier}">${C.tiers[q.tier].label}</b>`;
+    const outcome = (q) => (q.stuck ? `<b class="bad">Stranded</b>` : `<b class="tier-${q.tier}">${C.tiers[q.tier].label}</b>`)
+      + (mission ? `<span class="stars small-stars">${starStr(Sim.stars(mission, q.state).count)}</span>` : "");
+    const brief = mission ? `<div class="mission-brief">
+        <div class="eyebrow">MISSION · ${mission.name.toUpperCase()} · ${C.difficulties[difficulty].label.toUpperCase()}</div>
+        <p class="small">${mission.story}</p>
+        <p class="fine">★ all four requirements · ★★ also ${mission.target}+ science · ★★★ also 25 %+ battery left. Your best: ${starStr(bestStars(mission.id, difficulty))}</p>
+      </div>` : "";
+    const shared = challenge ? `<div class="hint">Shared design: it returned <b>${challenge.score}</b> science${challenge.stars != null && mission ? ` (${starStr(challenge.stars)})` : ""} on ${C.difficulties[difficulty].label}. Fly it as it is, or change it and beat it.</div>` : "";
     setPanel(`
+      ${shared}${brief}
       <div class="eyebrow">STEP 2 · PACK THE ROVER · ${terrain.meta.name.toUpperCase()}</div>
       <div class="meter"><div class="meter-label"><span>MASS</span><b>${mass} / ${C.massLimit} kg</b></div>
         <div class="bar"><span style="width:${(mass / C.massLimit) * 100}%"></span></div></div>
@@ -201,8 +262,63 @@ const UI = (() => {
         <div><span>No failure</span>${outcome(p)}</div>
         <div><span>Battery fails in the shadow</span>${outcome(pf)}</div>
       </div>
-      <div class="btn-row"><button class="btn" data-act="pick">Back</button><button class="btn primary" data-act="launch" ${loadout.length ? "" : "disabled"}>Land and drive</button></div>`);
+      <p class="muted small">The forecast leaves out random events (dust, wheel slip, cold snaps, upload glitches), so keep some margin.</p>
+      ${bestKey() && bestScore(bestKey(), difficulty) ? `<p class="muted small">Your best here on ${C.difficulties[difficulty].label}: <b>${bestScore(bestKey(), difficulty).score}</b> science.</p>` : ""}
+      <div class="btn-row"><button class="btn" data-act="${mission ? "missions" : "pick"}">Back</button><button class="btn" data-act="share">Share design</button><button class="btn primary" data-act="launch" ${loadout.length ? "" : "disabled"}>Land and drive</button></div>
+      <input id="share-out" class="share-out" readonly hidden aria-label="Share link">`);
     say(C.say.loadout);
+  }
+
+  // ---------- share a design ----------
+  // The whole design (mission or crater, payload, engineering, difficulty) fits in the link's #hash,
+  // so sharing needs no server. From the report, the link also carries the result to beat.
+  function designCode(withResult) {
+    const d = {
+      v: 1, d: difficulty, s: C.maxSlopeDeg, l: loadout,
+      m: mission ? mission.id : undefined,
+      c: mission ? undefined : craterChoice === "custom" ? { ...customParams } : craterChoice.id,
+      e: Object.fromEntries(Object.entries(C.engineering).map(([k, e]) => [k, e.value])),
+    };
+    if (withResult && sim) { const r = Sim.evaluate(sim); d.r = { score: r.score, tier: r.tier, stars: mission ? Sim.stars(mission, sim).count : undefined }; }
+    return btoa(unescape(encodeURIComponent(JSON.stringify(d)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function shareLink(withResult) {
+    const url = `${location.origin}${location.pathname}#design=${designCode(withResult)}`;
+    const out = $("#share-out");
+    if (out) { out.value = url; out.hidden = false; out.select(); const p = $("#panel"); p.scrollTop = p.scrollHeight; }
+    const done = () => toast("Link copied. Send it to a friend.");
+    if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, () => toast("Copy the link below"));
+    else toast("Copy the link below");
+  }
+
+  // Read a shared design. Every value is checked and clamped, so a hand-edited link can't break the game.
+  function loadDesign(code) {
+    let d;
+    try { d = JSON.parse(decodeURIComponent(escape(atob(code.replace(/-/g, "+").replace(/_/g, "/"))))); } catch { return false; }
+    if (!d || typeof d !== "object") return false;
+    const num = (v, lo, hi, def) => (Number.isFinite(+v) ? Math.min(hi, Math.max(lo, +v)) : def);
+    if (C.difficulties[d.d]) { difficulty = d.d; Sim.applyDifficulty(difficulty); }
+    const slope = num(d.s, 8, 30, C.maxSlopeDeg);
+    if (slope !== C.maxSlopeDeg) { C.maxSlopeDeg = slope; Object.keys(terrainCache).forEach((k) => delete terrainCache[k]); }
+    Object.entries(C.engineering).forEach(([k, e]) => { if (d.e && d.e[k] != null) e.value = Math.round(num(d.e[k], e.min, e.max, e.value) / e.step) * e.step; });
+    mission = C.missions.find((m) => m.id === d.m) || null;
+    if (mission) craterChoice = CRATER_DATA.find((c) => c.id === mission.crater);
+    else if (d.c && typeof d.c === "object") {
+      const lim = { diameterKm: [5, 100], depthKm: [0.3, 6], wallSlopeDeg: [4, 35], floorTempK: [25, 150], icePct: [0, 10] };
+      Object.entries(lim).forEach(([k, [lo, hi]]) => { customParams[k] = num(d.c[k], lo, hi, customParams[k]); });
+      craterChoice = "custom";
+    } else craterChoice = CRATER_DATA.find((c) => c.id === d.c) || CRATER_DATA[0];
+    const ids = Array.isArray(d.l) ? [...new Set(d.l)].filter((id) => C.items.some((i) => i.id === id)) : [];
+    loadout = [];
+    for (const id of ids) if (loadout.reduce((m, i) => m + item(i).mass, 0) + item(id).mass <= C.massLimit) loadout.push(id);
+    if (!loadout.length) loadout = ["neutron", "drill", "backup"];
+    challenge = d.r && Number.isFinite(+d.r.score) ? { score: Math.round(+d.r.score), stars: Number.isFinite(+d.r.stars) ? Math.min(3, Math.max(0, Math.round(+d.r.stars))) : null } : null;
+    engOpen = true;
+    terrain = getTerrain(craterChoice);
+    loadoutScreen();
+    say(challenge ? `Someone sent us their rover. It brought home ${challenge.score} science. Let's beat that.` : "Someone sent us their rover design. Have a look, then fly it.");
+    return true;
   }
 
   // ---------- rover engineering ----------
@@ -231,7 +347,8 @@ const UI = (() => {
   // ---------- driving ----------
   let siteOpen = null, lastLowWarn = false;
   function launch() {
-    sim = Sim.create(terrain, loadout, C.forceFailure ? { failureTrigger: C.forceFailure } : {}); // demo mode fixes the fault timing
+    // Demo mode fixes the fault timing and has no random events, so the video is the same every take.
+    sim = Sim.create(terrain, loadout, { ...(C.forceFailure ? { failureTrigger: C.forceFailure } : {}), events: !C.demo });
     hidePanel();
     $("#hud").hidden = false;
     drawMinimap();
@@ -246,16 +363,21 @@ const UI = (() => {
   function onEvent(name, data) {
     const map = {
       edge: () => say(C.say.edge, { slope: data, max: C.maxSlopeDeg }),
-      tooSteepUp: () => { say(C.say.tooSteepUp, { slope: data }); explain("slope"); },
-      tooSteepDown: () => { say(C.say.tooSteepDown, { slope: data }); explain("slope"); },
-      creep: () => { say(C.say.creep, { slope: data }); explain("slope"); },
+      tooSteepUp: () => { say(C.say.tooSteepUp, { slope: data }); explain("slope"); Sound.blip("warn"); },
+      tooSteepDown: () => { say(C.say.tooSteepDown, { slope: data }); explain("slope"); Sound.blip("warn"); },
+      creep: () => { say(C.say.creep, { slope: data }); explain("slope"); Sound.blip("warn"); },
       shadow: () => { say(C.say.shadow); explain("shadow"); },
-      signalLost: () => { say(C.say.signalLost); explain("signal"); },
-      signalBack: () => say(C.say.signalBack),
-      uplink: () => toast("Data uplinked to Earth"),
+      signalLost: () => { say(C.say.signalLost); explain("signal"); Sound.noSignal(true); },
+      signalBack: () => { say(C.say.signalBack); Sound.noSignal(false); },
+      uplink: () => { toast("Data uplinked to Earth"); Sound.blip("uplink"); },
       near: () => { if (data) { say(C.say.site); toast(`${data.label}: press E`); } },
       site: () => openSite(data),
       failure: () => openFailure(),
+      event: () => openEvent(),
+      eventInfo: () => {
+        const last = sim.ev.log[sim.ev.log.length - 1], ev = C.events.list.find((e) => e.id === last.id);
+        toast(ev.title); say(ev.text); Sound.blip("event");
+      },
       repaired: () => toast(`Repair done: main pack ${Math.round(C.mainBatteryWh * C.repair.mainFraction)} Wh`),
       lights: () => toast(data ? "Headlights on" : "Headlights off"),
       stuck: () => {},
@@ -347,6 +469,7 @@ const UI = (() => {
 
   // Panels opened during the drive are modals above the HUD, so nothing overlaps them.
   function openSite(site) {
+    if (sim.eventPending) return openEvent();
     if (!sim || sim.done) return;
     if (sim.failurePending) return openFailure();
     World.setPaused(true);
@@ -405,6 +528,7 @@ const UI = (() => {
     if (!events.includes("ran")) return closeSite();
     refreshMission();
     if (events.includes("ice")) say(C.say.ice); else if (events.includes("iceIR")) say(C.say.iceIR);
+    Sound.blip(events.includes("ice") || events.includes("iceIR") ? "ice" : "science");
 
     // Results: what ran, what it earned, and what it did for the requirements.
     const after = Sim.evaluate(sim), ran = sim.runs.filter((r) => r.site === site.id && ids.includes(r.id));
@@ -435,6 +559,7 @@ const UI = (() => {
 
   function openFailure() {
     World.setPaused(true);
+    Sound.blip("alarm");
     document.body.classList.add("alarm");
     setTimeout(() => document.body.classList.remove("alarm"), 1600);
     const opts = [`<button class="btn primary" data-act="respond" data-id="ration">${sim.backupCap ? "Route power through the backup" : "Ration power and carry on"}</button>`];
@@ -446,6 +571,30 @@ const UI = (() => {
     setTimeout(() => say(sim.backupCap ? C.say.failBackup : loadout.includes("kit") ? C.say.failKit : C.say.failNone), 2500);
   }
 
+  // A random event that needs a decision: time stops until the player picks.
+  function openEvent() {
+    const ev = sim.eventPending;
+    if (!ev) return;
+    World.setPaused(true);
+    Sound.blip("event");
+    const btns = ev.choices.map((c, i) => {
+      const cant = c.cost && c.cost > sim.stored;
+      return `<button class="btn ${i ? "" : "primary"}" data-act="choose" data-id="${c.id}" ${cant ? "disabled" : ""}>${c.label}<span class="muted small"> · ${cant ? "not enough power" : c.note}</span></button>`;
+    }).join("");
+    setPanel(`<div class="alert soft"><div class="eyebrow">Mission event</div>
+      <h2>${ev.title}</h2><p>${ev.text}</p>
+      <p class="muted small">Battery ${fmt(sim.stored)} / ${fmt(Sim.capacity(sim))} Wh</p>${btns}</div>`, "modal");
+    say(ev.text);
+  }
+
+  function chooseEvent(id) {
+    Sim.chooseEvent(sim, id);
+    hidePanel();
+    if (sim.done) return finish();
+    if (sim.failurePending) return openFailure();
+    World.setPaused(false);
+  }
+
   function endMission() {
     if (!sim.done) Sim.end(sim, "ended");
     finish();
@@ -455,6 +604,7 @@ const UI = (() => {
     if (finish.lock) return;
     finish.lock = true;
     World.setPaused(true);
+    Sound.quiet();
     if (sim.stuck) say(C.say.stuck);
     setTimeout(() => { finish.lock = false; debrief(); }, sim.stuck ? 2200 : 300);
   }
@@ -466,16 +616,50 @@ const UI = (() => {
     const r = Sim.evaluate(sim), t = C.tiers[r.tier], u = sim.used;
     const total = Object.values(u).reduce((a, b) => a + b, 0);
     const row = (label, v, cls) => `<div class="stat-row"><span><i class="dot ${cls}"></i>${label}</span><b>${fmt(v)} Wh (${Math.round((v / total) * 100)}%)</b></div>`;
+    // Best science here on this difficulty, and how this run compares (and with the shared design, if any).
+    let bestLine = "";
+    const key = bestKey(), prevBest = bestScore(key, difficulty);
+    if (key) {
+      const batteryPct = Math.round((sim.stored / Sim.capacity(sim)) * 100);
+      if (!prevBest || r.score > prevBest.score) {
+        const all = store.get("lmd-best", {});
+        all[key] = { ...(all[key] || {}), [difficulty]: { score: r.score, batteryPct, loadout: [...loadout] } };
+        store.set("lmd-best", all);
+      }
+      bestLine = !prevBest ? "First run here: this is your best to beat."
+        : r.score > prevBest.score ? `New best science: ${r.score} (was ${prevBest.score}).`
+          : `Your best here: ${prevBest.score} science (${prevBest.loadout.map((id) => item(id).short).join(", ")}).`;
+    }
+    if (challenge) bestLine += ` ${r.score > challenge.score ? `You beat the shared design's ${challenge.score}!` : r.score === challenge.score ? `You tied the shared design's ${challenge.score}.` : `The shared design got ${challenge.score}; ${challenge.score - r.score} to go.`}`;
+    let starsBlock = "";
+    if (mission) {
+      const st = Sim.stars(mission, sim), prev = bestStars(mission.id, difficulty);
+      if (st.count > prev) {
+        const all = store.get("lmd-stars", {});
+        all[mission.id] = { ...(all[mission.id] || {}), [difficulty]: st.count };
+        store.set("lmd-stars", all);
+      }
+      const line = (ok, text) => `<div class="v ${ok ? "ok" : "no"}"><span class="mark">${ok ? "★" : "☆"}</span><div>${text}</div></div>`;
+      starsBlock = `<div class="stars-big" aria-label="${st.count} of 3 stars">${starStr(st.count)}</div>
+        <p class="muted small">${mission.name} · ${C.difficulties[difficulty].label}${st.count > prev ? (prev ? ` · new best (was ${starStr(prev)})` : " · first stars on this mission") : ` · best ${starStr(Math.max(prev, st.count))}`}</p>
+        <div class="verify">
+          ${line(st.full, "All four requirements met")}
+          ${line(st.target, `At least ${mission.target} science returned (you: ${st.score})`)}
+          ${line(st.margin, `At least 25 % of the battery left (you: ${st.batteryPct} %)`)}
+        </div>`;
+    }
     setPanel(`
-      <div class="eyebrow">MISSION REPORT · ${terrain.meta.name.toUpperCase()}</div>
+      <div class="eyebrow">MISSION REPORT · ${mission ? `${mission.name.toUpperCase()} · ` : ""}${terrain.meta.name.toUpperCase()}</div>
       <h1 class="tier tier-${r.tier}">${t.label}</h1>
       <p class="lead">${sim.stuck ? `${C.roverName} ran out of power in the crater. ` : ""}${t.line}</p>
+      ${starsBlock}
       <div class="scoreline"><span>Science returned<b>${r.score}</b></span>${r.lostPoints ? `<span class="bad">Never reached Earth: ${r.lostPoints}</span>` : ""}</div>
+      ${bestLine ? `<p class="muted small">${bestLine.trim()}</p>` : ""}
       <h3>Requirements check</h3>
       <div class="verify">${C.requirements.map((q) => `<div class="v ${r.met[q.id] ? "ok" : "no"}"><span class="mark">${r.met[q.id] ? "PASS" : "FAIL"}</span>
         <div><b>${q.id} ${q.title}</b><br><span class="muted">${r.why[q.id]}</span></div></div>`).join("")}</div>
       <h3>Where the energy went</h3>
-      ${row("Rolling", u.drive, "drive")}${row("Climbing", u.climb, "climb")}${row("Heaters", u.heaters, "heat")}${row("Headlights", u.lights, "house")}${row("Systems", u.systems, "house")}${row("Science", u.science, "inst")}
+      ${row("Rolling", u.drive, "drive")}${row("Climbing", u.climb, "climb")}${row("Heaters", u.heaters, "heat")}${row("Headlights", u.lights, "house")}${row("Systems", u.systems, "house")}${row("Science", u.science, "inst")}${u.events ? row("Events", u.events, "house") : ""}
       <div class="stat-row"><span>Solar collected</span><b>+${fmt(sim.solarWh)} Wh</b></div>
       ${sim.wastedWh > 1 ? `<div class="stat-row warnline"><span>Sunlight wasted (battery already full)</span><b>${fmt(sim.wastedWh)} Wh</b></div>` : ""}
       <h3>Trip</h3>
@@ -483,8 +667,11 @@ const UI = (() => {
         <li>Packed ${loadout.map((id) => item(id).short).join(", ")} (${Sim.massKg(loadout)} kg rover)</li>
         <li>${sim.distanceKm.toFixed(1)} km driven, ${fmt(sim.climbedM)} m climbed, steepest slope ${sim.maxSlopeSeen.toFixed(0)}°, ${sim.timeH.toFixed(1)} mission hours</li>
         <li>${sim.failed ? `Battery failed ${sim.failureTrigger === "shadow" ? "on entering the shadow" : "during the first science run"}; you ${sim.response === "repair" ? "repaired it" : sim.backupCap ? "switched to the backup" : "rationed"}.` : "The battery never failed this time."}</li>
+        ${sim.ev.log.map((e) => { const ev = C.events.list.find((x) => x.id === e.id), ch = e.choice && ev.choices.find((c) => c.id === e.choice);
+          return `<li>Hour ${e.timeH.toFixed(1)}: ${ev.title.toLowerCase()}${ch ? `; you chose “${ch.label.toLowerCase()}”` : ""}.</li>`; }).join("")}
       </ul>
-      <div class="btn-row"><button class="btn primary" data-act="launch">Fly again</button><button class="btn" data-act="toLoadout">Change payload</button><button class="btn" data-act="pick">Another crater</button></div>`, "center wide");
+      <div class="btn-row"><button class="btn primary" data-act="launch">Fly again</button><button class="btn" data-act="toLoadout">Change payload</button><button class="btn" data-act="${mission ? "missions" : "pick"}">${mission ? "Another mission" : "Another crater"}</button><button class="btn" data-act="shareResult">Challenge a friend</button></div>
+      <input id="share-out" class="share-out" readonly hidden aria-label="Share link">`, "center wide");
   }
 
   // ---------- maps (minimap + full map share one renderer) ----------
@@ -560,7 +747,7 @@ const UI = (() => {
   function closeMap() {
     if ($("#bigmap").hidden) return;
     $("#bigmap").hidden = true;
-    if ($("#panel").hidden && !sim.failurePending) World.setPaused(false);
+    if ($("#panel").hidden && !sim.failurePending && !sim.eventPending) World.setPaused(false);
   }
 
   let toastTimer;
@@ -571,9 +758,17 @@ const UI = (() => {
     toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
   }
 
+  function toggleSound() {
+    Sound.setEnabled(!Sound.isEnabled());
+    updateSoundButton();
+    toast(Sound.isEnabled() ? "Sound on" : "Sound off");
+  }
+  function updateSoundButton() { $("#btn-sound").textContent = `X · Sound ${Sound.isEnabled() ? "on" : "off"}`; }
+
   // ---------- wiring ----------
   function start() {
     World.init($("#world"));
+    Sim.applyDifficulty(difficulty);
     $("#lumi-name").textContent = C.roverName;
     // Start with a slow orbit over Shackleton behind the title.
     terrain = getTerrain(CRATER_DATA[0]);
@@ -585,11 +780,16 @@ const UI = (() => {
       const id = t.dataset.id;
       ({
         briefing,
+        missions: missionsScreen,
+        mission: () => startMission(id),
+        difficulty: () => setDifficulty(id),
         preset: () => { engOpen = true; Sim.applyEngineering(C.presets[id]); loadoutScreen(); },
-        pick: () => { $("#loading").hidden = false; setTimeout(() => { pick(craterChoice === "custom" ? "custom" : craterChoice && craterChoice.id); $("#loading").hidden = true; }, 30); },
+        pick: () => { mission = null; challenge = null; $("#loading").hidden = false; setTimeout(() => { pick(craterChoice === "custom" ? "custom" : craterChoice && craterChoice.id); $("#loading").hidden = true; }, 30); },
         crater: () => selectCrater(id),
         toLoadout: loadoutScreen, toggle: () => toggle(id), launch,
         closeSite, runSite, siteDone,
+        choose: () => chooseEvent(id),
+        share: () => shareLink(false), shareResult: () => shareLink(true),
         respond: () => { Sim.respond(sim, id); hidePanel(); World.setPaused(false); if (id === "repair") say("Swapping cells. Three hours."); },
       })[t.dataset.act]?.();
     });
@@ -630,7 +830,14 @@ const UI = (() => {
     window.addEventListener("keydown", (e) => {
       if (e.code === "KeyM" && !$("#hud").hidden) $("#bigmap").hidden ? openMap() : closeMap();
       if (e.code === "Escape") closeMap();
+      if (e.code === "KeyX" && !$("#hud").hidden) toggleSound();
     });
+    // Browsers only start audio after a click or key press; the demo recording stays silent.
+    const unlockAudio = () => { if (!C.demo) Sound.unlock(); };
+    window.addEventListener("pointerdown", unlockAudio);
+    window.addEventListener("keydown", unlockAudio);
+    $("#btn-sound").addEventListener("click", toggleSound);
+    updateSoundButton();
     $("#btn-lights").addEventListener("click", () => World.toggleLights());
     $("#btn-cam").addEventListener("click", () => World.toggleCamera());
     $("#btn-site").addEventListener("click", () => { const s = World.nearSite(); if (s) openSite(s); });
@@ -639,7 +846,10 @@ const UI = (() => {
       const on = (e) => { e.preventDefault(); World.setTouch(k, true); }, off = () => World.setTouch(k, false);
       b.addEventListener("pointerdown", on); b.addEventListener("pointerup", off); b.addEventListener("pointerleave", off);
     });
-    title();
+    // Opened from a shared link? Go straight to that design; otherwise the title screen.
+    const m = !C.demo && location.hash.match(/^#design=([\w-]+)$/);
+    if (m) history.replaceState(null, "", location.pathname + location.search);
+    if (!(m && loadDesign(m[1]))) title();
   }
 
   return { start };
