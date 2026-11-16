@@ -332,3 +332,13 @@ body.alarm #app::after { content: ""; position: absolute; inset: 0; pointer-even
 .mission-brief .eyebrow { color: var(--warn); }
 .mission-brief p { margin: 6px 0 0; }
 .verify .v .mark { min-width: 38px; }
+
+/* Ask THOX: hint box on the packing screen, verdict in the report, phone-sideways hint */
+.thox-box { margin: 14px 0; padding: 12px 14px; border: 1px solid var(--line); border-left: 2px solid var(--fg); background: var(--panel); }
+.thox-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.thox-head .btn { width: auto; margin: 0; padding: 6px 12px; }
+.thox-box p { margin: 8px 0 0; line-height: 1.5; }
+.thox-verdict { margin: 14px 0; padding: 12px 14px; border-left: 2px solid var(--fg); background: var(--panel); }
+.thox-verdict p { margin: 6px 0 0; }
+.portrait-only { display: none; }
+@media (pointer: coarse) and (orientation: portrait) { .portrait-only { display: block; } }

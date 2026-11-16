@@ -170,6 +170,40 @@ const CONFIG = {
     stuck: "That's it. I'm out of power. I'll sleep here and dream about sunlight.",
     home: "Data's home. That's a mission.",
   },
+
+  // THOX the advisor. "Ask THOX" gives hints in steps (a nudge first, the specifics only if
+  // asked again), never the whole answer. The report verdict depends on the stars earned.
+  thox: {
+    hints: {
+      // {x} placeholders are filled in by advisor.js.
+      noNeutron: ["R1 asks for a hydrogen survey at two sites. Which instrument measures hydrogen?", "Pack the Neutron Spectrometer: it reads hydrogen from the surface, and R1 needs it at the rim and the wall."],
+      noIce: ["R2 asks us to detect ice in the cold trap. Is anything on board able to see ice?", "The IR Spectrometer or the Drill can detect ice. Without one of them, R2, R3 and R4 all fail."],
+      noDrill: ["R3 wants ice confirmed below the surface. How would we reach under the dust?", "Only the Drill reaches buried ice. Without it, R3 fails and the mission can't be a full success."],
+      stranded: ["Imagine my main battery fails {when}. Would this rover make it back into view of Earth?", "If the main pack fails {when}, I'd run out of power before getting back into view of Earth. A backup battery, or more battery in Rover engineering, would cover it."],
+      margin: ["Three stars need a quarter of the battery left at the end. Check the forecast if the battery fails {when}.", "If the main pack fails {when}, we'd finish with only {pct} % left. More battery capacity, or less mass to haul up the wall, fixes that."],
+      target: ["This mission's science target is {target}. How much does this payload bring home?", "At most {score} science with this payload. The IR Spectrometer earns double in the cold trap, and the Camera adds a few points at every site."],
+      deadWeight: ["Is everything on board pulling its weight? Every kilogram has to climb back out.", "The {item} doesn't help any requirement or the score in this plan. That's {kg} kg climbing {h} m for nothing."],
+      good: ["This design holds up even if my battery fails. I'd fly it. Want to push for more science, or keep the margin?"],
+    },
+    noMore: "That's all I've got. The rest is your call, Mission Designer.",
+    // Report verdicts, chosen by stars (story missions) or tier (Sandbox).
+    verdict: {
+      3: ["Three stars. You planned it, you drove it, you brought it home. I'm honestly impressed.", "Perfect mission. If I had hands, I'd applaud. I have wheels, so imagine a little spin."],
+      2: ["Two stars. Solid mission, and the third one is right there.", "Good work. One more star and they'll name a crater after you. Probably a small one."],
+      1: ["One star: the science is home. Now let's make it look easy.", "We did the job. Not gracefully, but we did it."],
+      0: ["Well, that happened. Every great mission team has a mission like this. Usually just one.", "Zero stars, but plenty of data about what not to do. Science!"],
+    },
+    why: {
+      stuckNoBackup: "Leaving the backup battery on the launch pad was bold. The Moon was not impressed.",
+      stuck: "We ran out of power in the dark. I'm not mad, just very, very cold.",
+      R4: "We found ice and then kept it a secret. Climb until EARTH LINK shows before ending the mission.",
+      R3: "The Drill came all this way and never touched the cold trap. It's taking it personally.",
+      R2: "We never ran an ice instrument in the cold trap. The ice is still down there, waiting politely.",
+      R1: "The Neutron Spectrometer needs two sites, the rim and the wall. One reading is a rumor, two is a map.",
+      target: "Every requirement met, but short of the science target. Ask me while packing which instruments pay off.",
+      margin: "Full success, running on fumes. Three stars needs a quarter of the battery left at the end.",
+    },
+  },
 };
 
 if (typeof module !== "undefined") module.exports = CONFIG;

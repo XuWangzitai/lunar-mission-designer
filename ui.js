@@ -77,7 +77,8 @@ const UI = (() => {
       <h1>Lunar Mission Designer</h1>
       <p class="lead">Pick a real crater at the Moon's south pole, pack your rover, and drive it into permanent shadow to look for ice. The terrain is real: it comes from NASA's Lunar Reconnaissance Orbiter laser altimeter.</p>
       <button class="btn primary" data-act="briefing">Start mission briefing</button>
-      <p class="fine">Physics and crater data are real where marked; power and science values are game values. Not affiliated with or endorsed by NASA. <a href="v1/">Play v1 (2D)</a></p>`, "hero");
+      <p class="fine">Physics and crater data are real where marked; power and science values are game values. Not affiliated with or endorsed by NASA. <a href="v1/">Play v1 (2D)</a></p>
+      <p class="fine portrait-only">On a phone? Turn it sideways for the best view.</p>`, "hero");
     say(`Hi, I'm ${C.roverName}. Let's go find some ice.`);
   }
 
@@ -263,6 +264,7 @@ const UI = (() => {
         <div><span>Battery fails in the shadow</span>${outcome(pf)}</div>
       </div>
       <p class="muted small">The forecast leaves out random events (dust, wheel slip, cold snaps, upload glitches), so keep some margin.</p>
+      ${thoxBox()}
       ${bestKey() && bestScore(bestKey(), difficulty) ? `<p class="muted small">Your best here on ${C.difficulties[difficulty].label}: <b>${bestScore(bestKey(), difficulty).score}</b> science.</p>` : ""}
       <div class="btn-row"><button class="btn" data-act="${mission ? "missions" : "pick"}">Back</button><button class="btn" data-act="share">Share design</button><button class="btn primary" data-act="launch" ${loadout.length ? "" : "disabled"}>Land and drive</button></div>
       <input id="share-out" class="share-out" readonly hidden aria-label="Share link">`);
@@ -322,6 +324,43 @@ const UI = (() => {
   }
 
   // ---------- rover engineering ----------
+  // ---------- Ask THOX (hints, never the full answer) ----------
+  // Hints walk through the design's problems: a nudge first, the specifics on the next ask.
+  // Changing the design starts the hints over.
+  const thox = { key: "", n: 0, text: "" };
+  const designKey = () => JSON.stringify([terrain && terrain.meta.name, loadout, mission && mission.id, difficulty, Object.values(C.engineering).map((e) => e.value)]);
+  function thoxBox() {
+    if (thox.key !== designKey()) { thox.key = designKey(); thox.n = 0; thox.text = ""; }
+    const total = thox.n ? Advisor.packingIssues(terrain, loadout, mission).flat().length : 1;
+    const label = !thox.n ? "Ask THOX" : thox.n > total ? "No more hints" : "Another hint";
+    return `<div class="thox-box"><div class="thox-head"><span class="lumi-name">${C.roverName}</span>
+      <button class="btn ghost small" data-act="askThox" ${thox.n > total ? "disabled" : ""}>${label}</button></div>
+      <p id="thox-hint" class="small">${thox.text || "Not sure if this design works? Ask me. I'll point you the right way, but the choices are yours."}</p></div>`;
+  }
+  function askThox() {
+    const hints = Advisor.packingIssues(terrain, loadout, mission).flat();
+    thox.text = thox.n < hints.length ? hints[thox.n] : C.thox.noMore;
+    thox.n++;
+    const box = $(".thox-box");
+    if (box) box.outerHTML = thoxBox();
+    say(thox.text);
+  }
+
+  // While driving: what's next and why, plus the energy needed to get back into view of Earth.
+  function askThoxDrive() {
+    if ($("#hud").hidden || !sim || sim.done || sim.failurePending || sim.eventPending || !$("#panel").hidden) return;
+    World.setPaused(true);
+    const p = World.position(), h = Advisor.driveHint(sim), back = Advisor.returnCost(sim, terrain, p.x, p.y);
+    const left = sim.stored - back.wh, pct = Math.round((100 * left) / Sim.capacity(sim));
+    const energy = back.inView ? "We're in view of Earth right now, so data goes home as soon as we collect it."
+      : `Getting back into view of Earth from here costs about <b>${fmt(back.wh)} Wh</b>, ${fmt(back.climbWh)} Wh of it just for climbing ${fmt(back.climbM)} m (m·g·h ÷ η = ${Math.round(sim.massKg)} kg × ${C.gMoon} m/s² × ${fmt(back.climbM)} m ÷ ${C.drivetrainEfficiency} = ${((sim.massKg * C.gMoon * back.climbM) / C.drivetrainEfficiency / 1e6).toFixed(2)} MJ, and 1 Wh = 3,600 J). We have ${fmt(sim.stored)} Wh, so about <b>${Math.max(0, pct)} %</b> would be left when we get there${pct < 25 ? ". That's tight" : ""}.`;
+    setPanel(`<div class="eyebrow">ASK ${C.roverName}</div>
+      <h2>${h.next}</h2><p>${h.why}</p>
+      <h3>Energy check</h3><p class="small">${energy}</p>
+      <button class="btn primary" data-act="closeSite">Keep driving</button>`, "modal");
+    say(h.next);
+  }
+
   let engOpen = false;
   const engUnit = (k, v) => `${k === "batteryWh" ? fmt(v) : v} ${C.engineering[k].unit}`;
   function engineeringPanel() {
@@ -356,7 +395,8 @@ const UI = (() => {
     shown.clear();
     $("#explain").hidden = true;
     say(C.say.start);
-    if (!C.demo) toast(matchMedia("(pointer: coarse)").matches ? "Hold ▲ to drive · ◀ ▶ to steer" : "Hold W or ↑ to drive · A/D to steer · M for the map");
+    const coarse = matchMedia("(pointer: coarse)").matches, upright = coarse && innerHeight > innerWidth;
+    if (!C.demo) toast(upright ? "Turn your phone sideways for the best view" : coarse ? "Hold ▲ to drive · ◀ ▶ to steer" : "Hold W or ↑ to drive · A/D to steer · M for the map · T to ask THOX");
     lastLowWarn = false;
   }
 
@@ -614,6 +654,9 @@ const UI = (() => {
     World.preview(terrain);
     $("#hud").hidden = true;
     const r = Sim.evaluate(sim), t = C.tiers[r.tier], u = sim.used;
+    const v = Advisor.verdict(sim, mission);
+    const verdictBlock = `<div class="thox-verdict"><span class="lumi-name">${C.roverName}</span><p>${v.line}</p>${v.why ? `<p class="muted small">${v.why}</p>` : ""}</div>`;
+    setTimeout(() => say(v.line), 400);
     const total = Object.values(u).reduce((a, b) => a + b, 0);
     const row = (label, v, cls) => `<div class="stat-row"><span><i class="dot ${cls}"></i>${label}</span><b>${fmt(v)} Wh (${Math.round((v / total) * 100)}%)</b></div>`;
     // Best science here on this difficulty, and how this run compares (and with the shared design, if any).
@@ -652,7 +695,7 @@ const UI = (() => {
       <div class="eyebrow">MISSION REPORT · ${mission ? `${mission.name.toUpperCase()} · ` : ""}${terrain.meta.name.toUpperCase()}</div>
       <h1 class="tier tier-${r.tier}">${t.label}</h1>
       <p class="lead">${sim.stuck ? `${C.roverName} ran out of power in the crater. ` : ""}${t.line}</p>
-      ${starsBlock}
+      ${starsBlock}${verdictBlock}
       <div class="scoreline"><span>Science returned<b>${r.score}</b></span>${r.lostPoints ? `<span class="bad">Never reached Earth: ${r.lostPoints}</span>` : ""}</div>
       ${bestLine ? `<p class="muted small">${bestLine.trim()}</p>` : ""}
       <h3>Requirements check</h3>
@@ -788,7 +831,7 @@ const UI = (() => {
         crater: () => selectCrater(id),
         toLoadout: loadoutScreen, toggle: () => toggle(id), launch,
         closeSite, runSite, siteDone,
-        choose: () => chooseEvent(id),
+        choose: () => chooseEvent(id), askThox,
         share: () => shareLink(false), shareResult: () => shareLink(true),
         respond: () => { Sim.respond(sim, id); hidePanel(); World.setPaused(false); if (id === "repair") say("Swapping cells. Three hours."); },
       })[t.dataset.act]?.();
@@ -831,12 +874,14 @@ const UI = (() => {
       if (e.code === "KeyM" && !$("#hud").hidden) $("#bigmap").hidden ? openMap() : closeMap();
       if (e.code === "Escape") closeMap();
       if (e.code === "KeyX" && !$("#hud").hidden) toggleSound();
+      if (e.code === "KeyT" && !$("#hud").hidden) askThoxDrive();
     });
     // Browsers only start audio after a click or key press; the demo recording stays silent.
     const unlockAudio = () => { if (!C.demo) Sound.unlock(); };
     window.addEventListener("pointerdown", unlockAudio);
     window.addEventListener("keydown", unlockAudio);
     $("#btn-sound").addEventListener("click", toggleSound);
+    $("#btn-thox").addEventListener("click", askThoxDrive);
     updateSoundButton();
     $("#btn-lights").addEventListener("click", () => World.toggleLights());
     $("#btn-cam").addEventListener("click", () => World.toggleCamera());

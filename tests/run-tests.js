@@ -222,6 +222,46 @@ for (const c of CRATERS) {
   check("events never break the rules", bad === 0, first);
 }
 
+// THOX the advisor: hints point at real problems, never contradict the forecast.
+{
+  global.Sim = Sim;
+  const Advisor = require("../advisor.js");
+  Sim.applyDifficulty("normal");
+  const ids = CONFIG.items.map((i) => i.id), loads = [];
+  for (let m = 1; m < 1 << ids.length; m++) { const L = ids.filter((_, i) => m & (1 << i)); if (L.reduce((k, id) => k + Sim.item(id).mass, 0) <= CONFIG.massLimit) loads.push(L); }
+  let bad = 0, first = "", goodCount = 0, total = 0;
+  for (const mission of CONFIG.missions) {
+    const T = TERR[mission.crater] || Terrain.fromCrater(CRATERS.find((c) => c.id === mission.crater));
+    for (const L of loads) {
+      total++;
+      const issues = Advisor.packingIssues(T, L, mission), flat = issues.flat();
+      const says = (h) => issues.includes(CONFIG.thox.hints[h]) || issues.some((x) => x[0] && CONFIG.thox.hints[h] && x.length === CONFIG.thox.hints[h].length && x[0].startsWith(CONFIG.thox.hints[h][0].slice(0, 20)));
+      const worst = ["none", "shadow", "firstScience"].map((f) => Sim.stars(mission, Sim.predict(T, L, { failure: f }).state).count);
+      const good = says("good");
+      if (good) goodCount++;
+      const probs = [];
+      if (!flat.length || flat.some((t) => /\{\w+\}/.test(t))) probs.push("empty hint or unfilled {slot}");
+      if (good && Math.min(...worst) < 2) probs.push(`calls the design good but worst case is ${Math.min(...worst)}★`);
+      if (!L.includes("drill") && !says("noDrill") && !says("noIce")) probs.push("missed the missing Drill");
+      if (!L.includes("neutron") && !says("noNeutron")) probs.push("missed the missing Neutron");
+      if (probs.length) { bad++; first = first || `${mission.id} [${L}]: ${probs}`; }
+    }
+  }
+  console.log(`\nTHOX hints: ${total} designs checked, ${goodCount} called good`);
+  check("THOX's packing hints match the forecast for every design and mission", bad === 0, first);
+  check("some designs get THOX's approval", goodCount > 0);
+
+  const T = TERR.faustini || Terrain.fromCrater(CRATERS.find((c) => c.id === "faustini")), s = Sim.create(T, ["neutron", "drill", "backup"]);
+  const atTrap = Advisor.returnCost(s, T, T.sites[2].x, T.sites[2].y), atStart = Advisor.returnCost(s, T, T.start.x, T.start.y);
+  check("from the landing site Earth is already in view", atStart.inView && atStart.wh === 0);
+  const expectClimb = (s.massKg * CONFIG.gMoon * atTrap.climbM) / CONFIG.drivetrainEfficiency / 3600;
+  check("from the cold trap the way back costs energy, climbing = m·g·h ÷ η", atTrap.wh > 0 && Math.abs(atTrap.climbWh - expectClimb) < 2, `${atTrap.wh} Wh, climb ${atTrap.climbWh} vs ${Math.round(expectClimb)}`);
+  const v3 = Advisor.verdict(Sim.predict(T, ["neutron", "drill", "backup"]).state, CONFIG.missions[0], 0);
+  const v0 = Advisor.verdict(Sim.predict(T, ["neutron", "ir", "drill", "camera"], { failure: "shadow" }).state, CONFIG.missions[0], 0);
+  check("verdict: 3 stars gets praise and no complaint", v3.stars === 3 && !v3.why && CONFIG.thox.verdict[3].includes(v3.line));
+  check("verdict: stranded without a backup gets the backup joke", v0.stars === 0 && v0.why === CONFIG.thox.why.stuckNoBackup);
+}
+
 // Rover engineering: defaults reproduce the standard rover; limits can't be broken.
 const std = Sim.applyEngineering({});
 check("standard rover is 250 kg", std.baseMassKg === 250, `got ${std.baseMassKg}`);

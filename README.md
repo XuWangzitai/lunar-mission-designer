@@ -18,7 +18,10 @@ The central trade-off: **pack a backup battery, or use that mass for another sci
 6. **Random events** grounded in real lunar problems can hit too: dust on the solar panels, wheel slip on a slope, a cold snap in the shadow, a garbled upload. Some ask you to choose (spend energy now, or live with the consequence).
 7. Data taken in the crater waits until Earth is back in view, so you have to climb out.
 8. **Debrief** checks each requirement, shows where every watt-hour went, lists the events and your choices, and compares the run with your best score.
-9. **Share design** (packing screen) or **Challenge a friend** (report) makes a link that rebuilds your exact rover, and the score to beat, on someone else's screen. Nothing is sent to a server: it is all in the link.
+9. **Ask THOX** on the packing screen for hints about your design: a nudge first, the specifics if you ask again, never the full answer. While driving, press **T** (or tap Ask THOX) for what to do next, why it matters, and how much energy the climb back into view of Earth will cost (m·g·h ÷ η, worked out). In the report, THOX praises or teases you depending on your stars.
+10. **Share design** (packing screen) or **Challenge a friend** (report) makes a link that rebuilds your exact rover, and the score to beat, on someone else's screen. Nothing is sent to a server: it is all in the link.
+
+On a phone, play it sideways (landscape) for the best view.
 
 The world has boulders, small craters, wheel tracks, dust, a lit Earth in the sky and synthesized sound (X toggles it).
 

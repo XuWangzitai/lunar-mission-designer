@@ -76,6 +76,7 @@ const Sim = (() => {
   function create(terrain, loadout, opts = {}) {
     const rng = opts.rng || Math.random;
     const f = facts(terrain.meta);
+    const seed = opts.seed != null ? opts.seed >>> 0 : Math.floor(Math.random() * 2 ** 32);
     const s = {
       terrain, loadout: [...loadout], facts: f, massKg: massKg(loadout),
       mainCap: C.mainBatteryWh, backupCap: loadout.includes("backup") ? C.backupBatteryWh : 0,
@@ -87,7 +88,7 @@ const Sim = (() => {
       stuck: false, done: false, endReason: null,
       // Random events: off unless asked for (the forecast and most tests leave them out).
       // forceEvent (demo video): that one event happens as soon as it can, and nothing random does.
-      ev: { on: !!opts.events || !!opts.forceEvent, force: opts.forceEvent || null, rng: seeded(opts.seed != null ? opts.seed : Math.floor(Math.random() * 2 ** 32)), count: 0, lastH: -99, log: [] },
+      ev: { on: !!opts.events || !!opts.forceEvent, force: opts.forceEvent || null, seed, rng: seeded(seed), count: 0, lastH: -99, log: [] },
       eventPending: null,
       mods: { solar: { mul: 1, untilH: 0 }, heat: { mul: 1, untilH: 0 }, uplinkBlockedUntilH: 0 },
     };
