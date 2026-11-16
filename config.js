@@ -71,6 +71,33 @@ const CONFIG = {
     hard: { label: "Hard", note: "Severe battery fault, weaker panels, more surprises", failureMainFraction: 0.25, solarMul: 0.8, eventRate: 1.6 },
   },
 
+  // Random events during a mission. Chances and costs are game values; the problems are real ones
+  // (lunar dust clings to hardware, wheels sink in soft regolith, links drop packets).
+  events: {
+    perHour: 0.12,        // chance per mission hour at Normal, scaled by the difficulty's eventRate
+    glitchChance: 0.3,    // chance a data upload fails the first time (also scaled)
+    maxPerMission: 3,
+    minGapH: 2,
+    list: [
+      { id: "dust", when: "sun", title: "Dust on the solar panels",
+        text: "Fine dust thrown up by the wheels has stuck to the panels. Solar output is down 40 %.",
+        choices: [
+          { id: "shake", label: "Shake the panels clean", cost: 120, note: "−120 Wh now" },
+          { id: "ignore", label: "Leave it", note: "panels at 60 % for 8 hours" },
+        ] },
+      { id: "slip", when: "slope", cost: 90, title: "Wheel slip",
+        text: "A wheel sank into soft regolith on the slope. Rocking free cost 90 Wh." },
+      { id: "cold", when: "shadow", title: "Cold snap",
+        text: "The ground here is colder than the forecast. Heaters will draw 50 % more for the next 3 hours." },
+      { id: "glitch", when: "uplink", title: "Upload failed",
+        text: "Earth came back into view, but the first upload was garbled and didn't arrive.",
+        choices: [
+          { id: "resend", label: "Resend now", cost: 60, note: "−60 Wh, data goes home now" },
+          { id: "later", label: "Let it retry by itself", note: "data waits 2 more hours" },
+        ] },
+    ],
+  },
+
   // Story missions. Facts in `story` are real (sources in README); the scoring targets are game values.
   // Stars: 1 = all four requirements met; 2 = also return at least `target` science;
   // 3 = also finish with at least 25 % of the battery left.

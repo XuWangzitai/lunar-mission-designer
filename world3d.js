@@ -472,7 +472,7 @@ let hudTimer = 0;
 function frame() {
   const dt = Math.min(0.05, clock.getDelta());
   if (mode === "preview") orbit(dt);
-  if (mode === "drive" && !paused && sim && !sim.done && !sim.failurePending) drive(dt);
+  if (mode === "drive" && !paused && sim && !sim.done && !sim.failurePending && !sim.eventPending) drive(dt);
   else if (mode === "drive") updateDust(dt, false, 0); // let airborne dust settle while paused
   if (mode === "drive") followCamera(dt);
   renderer.render(scene, camera);

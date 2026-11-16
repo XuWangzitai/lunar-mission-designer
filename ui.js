@@ -256,6 +256,7 @@ const UI = (() => {
         <div><span>No failure</span>${outcome(p)}</div>
         <div><span>Battery fails in the shadow</span>${outcome(pf)}</div>
       </div>
+      <p class="muted small">The forecast leaves out random events (dust, wheel slip, cold snaps, upload glitches), so keep some margin.</p>
       <div class="btn-row"><button class="btn" data-act="${mission ? "missions" : "pick"}">Back</button><button class="btn primary" data-act="launch" ${loadout.length ? "" : "disabled"}>Land and drive</button></div>`);
     say(C.say.loadout);
   }
@@ -286,7 +287,8 @@ const UI = (() => {
   // ---------- driving ----------
   let siteOpen = null, lastLowWarn = false;
   function launch() {
-    sim = Sim.create(terrain, loadout, C.forceFailure ? { failureTrigger: C.forceFailure } : {}); // demo mode fixes the fault timing
+    // Demo mode fixes the fault timing and has no random events, so the video is the same every take.
+    sim = Sim.create(terrain, loadout, { ...(C.forceFailure ? { failureTrigger: C.forceFailure } : {}), events: !C.demo });
     hidePanel();
     $("#hud").hidden = false;
     drawMinimap();
@@ -311,6 +313,11 @@ const UI = (() => {
       near: () => { if (data) { say(C.say.site); toast(`${data.label}: press E`); } },
       site: () => openSite(data),
       failure: () => openFailure(),
+      event: () => openEvent(),
+      eventInfo: () => {
+        const last = sim.ev.log[sim.ev.log.length - 1], ev = C.events.list.find((e) => e.id === last.id);
+        toast(ev.title); say(ev.text); Sound.blip("event");
+      },
       repaired: () => toast(`Repair done: main pack ${Math.round(C.mainBatteryWh * C.repair.mainFraction)} Wh`),
       lights: () => toast(data ? "Headlights on" : "Headlights off"),
       stuck: () => {},
@@ -402,6 +409,7 @@ const UI = (() => {
 
   // Panels opened during the drive are modals above the HUD, so nothing overlaps them.
   function openSite(site) {
+    if (sim.eventPending) return openEvent();
     if (!sim || sim.done) return;
     if (sim.failurePending) return openFailure();
     World.setPaused(true);
@@ -503,6 +511,30 @@ const UI = (() => {
     setTimeout(() => say(sim.backupCap ? C.say.failBackup : loadout.includes("kit") ? C.say.failKit : C.say.failNone), 2500);
   }
 
+  // A random event that needs a decision: time stops until the player picks.
+  function openEvent() {
+    const ev = sim.eventPending;
+    if (!ev) return;
+    World.setPaused(true);
+    Sound.blip("event");
+    const btns = ev.choices.map((c, i) => {
+      const cant = c.cost && c.cost > sim.stored;
+      return `<button class="btn ${i ? "" : "primary"}" data-act="choose" data-id="${c.id}" ${cant ? "disabled" : ""}>${c.label}<span class="muted small"> · ${cant ? "not enough power" : c.note}</span></button>`;
+    }).join("");
+    setPanel(`<div class="alert soft"><div class="eyebrow">Mission event</div>
+      <h2>${ev.title}</h2><p>${ev.text}</p>
+      <p class="muted small">Battery ${fmt(sim.stored)} / ${fmt(Sim.capacity(sim))} Wh</p>${btns}</div>`, "modal");
+    say(ev.text);
+  }
+
+  function chooseEvent(id) {
+    Sim.chooseEvent(sim, id);
+    hidePanel();
+    if (sim.done) return finish();
+    if (sim.failurePending) return openFailure();
+    World.setPaused(false);
+  }
+
   function endMission() {
     if (!sim.done) Sim.end(sim, "ended");
     finish();
@@ -551,7 +583,7 @@ const UI = (() => {
       <div class="verify">${C.requirements.map((q) => `<div class="v ${r.met[q.id] ? "ok" : "no"}"><span class="mark">${r.met[q.id] ? "PASS" : "FAIL"}</span>
         <div><b>${q.id} ${q.title}</b><br><span class="muted">${r.why[q.id]}</span></div></div>`).join("")}</div>
       <h3>Where the energy went</h3>
-      ${row("Rolling", u.drive, "drive")}${row("Climbing", u.climb, "climb")}${row("Heaters", u.heaters, "heat")}${row("Headlights", u.lights, "house")}${row("Systems", u.systems, "house")}${row("Science", u.science, "inst")}
+      ${row("Rolling", u.drive, "drive")}${row("Climbing", u.climb, "climb")}${row("Heaters", u.heaters, "heat")}${row("Headlights", u.lights, "house")}${row("Systems", u.systems, "house")}${row("Science", u.science, "inst")}${u.events ? row("Events", u.events, "house") : ""}
       <div class="stat-row"><span>Solar collected</span><b>+${fmt(sim.solarWh)} Wh</b></div>
       ${sim.wastedWh > 1 ? `<div class="stat-row warnline"><span>Sunlight wasted (battery already full)</span><b>${fmt(sim.wastedWh)} Wh</b></div>` : ""}
       <h3>Trip</h3>
@@ -559,6 +591,8 @@ const UI = (() => {
         <li>Packed ${loadout.map((id) => item(id).short).join(", ")} (${Sim.massKg(loadout)} kg rover)</li>
         <li>${sim.distanceKm.toFixed(1)} km driven, ${fmt(sim.climbedM)} m climbed, steepest slope ${sim.maxSlopeSeen.toFixed(0)}°, ${sim.timeH.toFixed(1)} mission hours</li>
         <li>${sim.failed ? `Battery failed ${sim.failureTrigger === "shadow" ? "on entering the shadow" : "during the first science run"}; you ${sim.response === "repair" ? "repaired it" : sim.backupCap ? "switched to the backup" : "rationed"}.` : "The battery never failed this time."}</li>
+        ${sim.ev.log.map((e) => { const ev = C.events.list.find((x) => x.id === e.id), ch = e.choice && ev.choices.find((c) => c.id === e.choice);
+          return `<li>Hour ${e.timeH.toFixed(1)}: ${ev.title.toLowerCase()}${ch ? `; you chose “${ch.label.toLowerCase()}”` : ""}.</li>`; }).join("")}
       </ul>
       <div class="btn-row"><button class="btn primary" data-act="launch">Fly again</button><button class="btn" data-act="toLoadout">Change payload</button><button class="btn" data-act="${mission ? "missions" : "pick"}">${mission ? "Another mission" : "Another crater"}</button></div>`, "center wide");
   }
@@ -636,7 +670,7 @@ const UI = (() => {
   function closeMap() {
     if ($("#bigmap").hidden) return;
     $("#bigmap").hidden = true;
-    if ($("#panel").hidden && !sim.failurePending) World.setPaused(false);
+    if ($("#panel").hidden && !sim.failurePending && !sim.eventPending) World.setPaused(false);
   }
 
   let toastTimer;
@@ -677,6 +711,7 @@ const UI = (() => {
         crater: () => selectCrater(id),
         toLoadout: loadoutScreen, toggle: () => toggle(id), launch,
         closeSite, runSite, siteDone,
+        choose: () => chooseEvent(id),
         respond: () => { Sim.respond(sim, id); hidePanel(); World.setPaused(false); if (id === "repair") say("Swapping cells. Three hours."); },
       })[t.dataset.act]?.();
     });
